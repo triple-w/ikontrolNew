@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\CommercialDocuments\TemplateVariableResolver;
 use App\Support\Decimal;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -169,6 +170,101 @@ class CommercialQuotesTest extends TestCase
             ->assertSessionHasErrors('fiscal_client_id');
     }
 
+    public function test_user_can_create_quote_template_and_keep_one_default(): void
+    {
+        $user = $this->createUser();
+
+        $this->actingAs($user)->post(route('configuracion.formatos-documentos.store'), [
+            'name' => 'Formato A',
+            'document_type' => 'quote',
+            'is_default' => '1',
+            'is_active' => '1',
+            'show_logo' => '1',
+            'show_contact_info' => '1',
+            'show_item_tax' => '1',
+            'show_item_sku' => '1',
+            'show_notes' => '1',
+            'header_text' => 'Hola {{ cliente.nombre }}',
+        ])->assertRedirect();
+
+        $this->actingAs($user)->post(route('configuracion.formatos-documentos.store'), [
+            'name' => 'Formato B',
+            'document_type' => 'quote',
+            'is_default' => '1',
+            'is_active' => '1',
+            'show_logo' => '1',
+            'show_contact_info' => '1',
+            'show_item_tax' => '1',
+            'show_item_sku' => '1',
+            'show_notes' => '1',
+        ])->assertRedirect();
+
+        $this->assertSame(1, DB::table('commercial_document_templates')->where('users_id', $user->id)->where('document_type', 'quote')->where('is_default', 1)->count());
+        $this->assertDatabaseHas('commercial_document_templates', ['name' => 'Formato B', 'is_default' => 1]);
+        $this->assertDatabaseHas('commercial_document_templates', ['name' => 'Formato A', 'is_default' => 0]);
+    }
+
+    public function test_template_variables_resolve_allowed_values_without_executing_unknown_text(): void
+    {
+        $resolver = new TemplateVariableResolver();
+
+        $text = $resolver->resolve('Cotizacion para {{ cliente.nombre }} {{ php.info }} <script>alert(1)</script>', [
+            'cliente' => ['nombre' => 'Cliente Seguro'],
+        ]);
+
+        $this->assertSame('Cotizacion para Cliente Seguro {{ php.info }} <script>alert(1)</script>', $text);
+    }
+
+    public function test_draft_preview_does_not_create_quote_or_consume_folio(): void
+    {
+        $user = $this->createUser();
+        $clientId = $this->createCommercialClient($user->id, 'Cliente Preview');
+        $templateId = $this->createTemplate($user->id, 'Formato Preview');
+
+        $this->actingAs($user)
+            ->post(route('comercial.cotizaciones.preview-draft'), $this->quotePayload($clientId, [
+                ['snapshot_name' => 'Servicio temporal', 'quantity' => '1', 'unit_price' => '100'],
+            ], ['commercial_document_template_id' => $templateId]))
+            ->assertOk()
+            ->assertSee('Vista temporal sin guardar', false)
+            ->assertSee('Borrador');
+
+        $this->assertSame(0, DB::table('commercial_quotes')->count());
+    }
+
+    public function test_user_cannot_use_template_from_another_user(): void
+    {
+        $owner = $this->createUser('owner-template@example.test', 'OWNERT');
+        $other = $this->createUser('other-template@example.test', 'OTHERT');
+        $clientId = $this->createCommercialClient($owner->id, 'Cliente Propio');
+        $foreignTemplateId = $this->createTemplate($other->id, 'Formato Ajeno');
+
+        $this->actingAs($owner)
+            ->post(route('comercial.cotizaciones.store'), $this->quotePayload($clientId, [
+                ['snapshot_name' => 'Servicio', 'quantity' => '1', 'unit_price' => '100'],
+            ], ['commercial_document_template_id' => $foreignTemplateId]))
+            ->assertSessionHasErrors('commercial_document_template_id');
+    }
+
+    public function test_sent_quote_keeps_template_snapshot_after_template_changes(): void
+    {
+        $user = $this->createUser();
+        $clientId = $this->createCommercialClient($user->id, 'Cliente Historico');
+        $templateId = $this->createTemplate($user->id, 'Formato Historico', ['header_text' => 'Texto original']);
+
+        $quoteId = $this->createQuote($user, $clientId, [
+            'save_action' => 'send',
+            'commercial_document_template_id' => $templateId,
+        ]);
+
+        DB::table('commercial_document_templates')->where('id', $templateId)->update(['header_text' => 'Texto cambiado']);
+
+        $quote = DB::table('commercial_quotes')->where('id', $quoteId)->first();
+
+        $this->assertSame('Formato Historico', $quote->template_name_snapshot);
+        $this->assertSame('Texto original', $quote->header_text_snapshot);
+    }
+
     private function quotePayload(int $clientId, array $items, array $overrides = []): array
     {
         return array_merge([
@@ -258,6 +354,7 @@ class CommercialQuotesTest extends TestCase
             $table->bigInteger('commercial_client_id');
             $table->bigInteger('commercial_contact_id')->nullable();
             $table->bigInteger('fiscal_client_id')->nullable();
+            $table->bigInteger('commercial_document_template_id')->nullable();
             $table->bigInteger('created_by_id');
             $table->bigInteger('assigned_user_id')->nullable();
             $table->string('folio_prefix', 20)->default('COT');
@@ -277,6 +374,35 @@ class CommercialQuotesTest extends TestCase
             $table->decimal('discount_total', 18, 6)->default(0);
             $table->decimal('tax_total', 18, 6)->default(0);
             $table->decimal('total', 18, 6)->default(0);
+            $table->string('template_name_snapshot')->nullable();
+            $table->string('logo_path_snapshot')->nullable();
+            $table->string('header_title_snapshot')->nullable();
+            $table->text('header_text_snapshot')->nullable();
+            $table->text('footer_text_snapshot')->nullable();
+            $table->text('terms_text_snapshot')->nullable();
+            $table->text('template_options_snapshot')->nullable();
+            $table->timestamps();
+        });
+
+        Schema::create('commercial_document_templates', function ($table) {
+            $table->id();
+            $table->bigInteger('users_id');
+            $table->string('name', 120);
+            $table->string('document_type', 30)->default('quote');
+            $table->boolean('is_default')->default(false);
+            $table->string('logo_path')->nullable();
+            $table->string('header_title')->nullable();
+            $table->text('header_text')->nullable();
+            $table->text('footer_text')->nullable();
+            $table->text('terms_text')->nullable();
+            $table->string('accent_style', 40)->nullable();
+            $table->boolean('show_logo')->default(true);
+            $table->boolean('show_contact_info')->default(true);
+            $table->boolean('show_fiscal_info')->default(false);
+            $table->boolean('show_item_tax')->default(true);
+            $table->boolean('show_item_sku')->default(true);
+            $table->boolean('show_notes')->default(true);
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
 
@@ -378,5 +504,30 @@ class CommercialQuotesTest extends TestCase
             'precio' => $price,
             'descripcion' => $description,
         ]);
+    }
+
+    private function createTemplate(int $userId, string $name, array $overrides = []): int
+    {
+        return (int) DB::table('commercial_document_templates')->insertGetId(array_merge([
+            'users_id' => $userId,
+            'name' => $name,
+            'document_type' => 'quote',
+            'is_default' => 0,
+            'logo_path' => null,
+            'header_title' => 'Cotizacion',
+            'header_text' => null,
+            'footer_text' => null,
+            'terms_text' => null,
+            'accent_style' => 'teal',
+            'show_logo' => 1,
+            'show_contact_info' => 1,
+            'show_fiscal_info' => 0,
+            'show_item_tax' => 1,
+            'show_item_sku' => 1,
+            'show_notes' => 1,
+            'is_active' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ], $overrides));
     }
 }

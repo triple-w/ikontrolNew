@@ -9,12 +9,16 @@ use App\Http\Requests\UpdateCommercialQuoteRequest;
 use App\Models\Cliente;
 use App\Models\CommercialClient;
 use App\Models\CommercialContact;
+use App\Models\CommercialDocumentTemplate;
 use App\Models\CommercialQuote;
 use App\Models\CommercialQuoteTax;
 use App\Models\Producto;
 use App\Models\User;
+use App\Services\CommercialDocuments\CommercialQuoteDocumentBuilder;
+use App\Services\CommercialDocuments\CommercialTemplateSnapshotter;
 use App\Services\CommercialQuoteCalculator;
 use App\Services\CommercialQuoteFolioService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -90,18 +94,22 @@ class CommercialQuoteController extends Controller
             'items' => [],
             'clientOptionsUrl' => route('comercial.cotizaciones.client-options', ['commercialClient' => '__CLIENT__']),
             'productSearchUrl' => route('comercial.cotizaciones.search-productos'),
+            'templates' => $this->templateOptions((int) $request->user()->id),
+            'defaultTemplateId' => $this->defaultTemplateId((int) $request->user()->id),
+            'previewDraftUrl' => route('comercial.cotizaciones.preview-draft'),
         ]);
     }
 
-    public function store(StoreCommercialQuoteRequest $request, CommercialQuoteCalculator $calculator, CommercialQuoteFolioService $folioService)
+    public function store(StoreCommercialQuoteRequest $request, CommercialQuoteCalculator $calculator, CommercialQuoteFolioService $folioService, CommercialTemplateSnapshotter $snapshotter)
     {
         $data = $request->validated();
         $client = $this->validatedClient($data['commercial_client_id'], $request->user());
         $this->validateRelatedIds($data, (int) $client->users_id, (int) $client->id);
+        $this->validatedTemplate($data['commercial_document_template_id'] ?? null, (int) $client->users_id);
         $payloadItems = $this->payloadItems($data['items']);
         $calculated = $calculator->calculate($payloadItems, (string) ($data['global_discount_amount'] ?? '0'));
 
-        $quote = $this->createWithRetry($data, $client, $calculated, $request, $folioService);
+        $quote = $this->createWithRetry($data, $client, $calculated, $request, $folioService, $snapshotter);
 
         return redirect()
             ->route('comercial.cotizaciones.show', $quote)
@@ -118,6 +126,7 @@ class CommercialQuoteController extends Controller
             'fiscalClient',
             'creator',
             'assignedUser',
+            'documentTemplate',
             'items.taxes',
             'taxes',
             'statusHistory.user',
@@ -144,10 +153,13 @@ class CommercialQuoteController extends Controller
             'items' => $commercialQuote->items->map(fn ($item) => $this->itemPayloadForForm($item))->values()->all(),
             'clientOptionsUrl' => route('comercial.cotizaciones.client-options', ['commercialClient' => '__CLIENT__']),
             'productSearchUrl' => route('comercial.cotizaciones.search-productos'),
+            'templates' => $this->templateOptions((int) $commercialQuote->users_id, (int) $commercialQuote->commercial_document_template_id),
+            'defaultTemplateId' => $this->defaultTemplateId((int) $commercialQuote->users_id),
+            'previewDraftUrl' => route('comercial.cotizaciones.preview-draft'),
         ]);
     }
 
-    public function update(UpdateCommercialQuoteRequest $request, CommercialQuote $commercialQuote, CommercialQuoteCalculator $calculator)
+    public function update(UpdateCommercialQuoteRequest $request, CommercialQuote $commercialQuote, CommercialQuoteCalculator $calculator, CommercialTemplateSnapshotter $snapshotter)
     {
         $this->authorize('update', $commercialQuote);
         $this->ensureEditable($commercialQuote);
@@ -155,9 +167,10 @@ class CommercialQuoteController extends Controller
         $data = $request->validated();
         $client = $this->validatedClient($data['commercial_client_id'], $request->user(), (int) $commercialQuote->users_id);
         $this->validateRelatedIds($data, (int) $commercialQuote->users_id, (int) $client->id);
+        $this->validatedTemplate($data['commercial_document_template_id'] ?? null, (int) $commercialQuote->users_id);
         $calculated = $calculator->calculate($this->payloadItems($data['items']), (string) ($data['global_discount_amount'] ?? '0'));
 
-        DB::transaction(function () use ($commercialQuote, $data, $client, $calculated, $request) {
+        DB::transaction(function () use ($commercialQuote, $data, $client, $calculated, $request, $snapshotter) {
             $oldStatus = $commercialQuote->status;
             $status = $oldStatus;
             if (($data['save_action'] ?? 'draft') === 'send' && $oldStatus === CommercialQuote::STATUS_DRAFT) {
@@ -169,6 +182,7 @@ class CommercialQuoteController extends Controller
             $this->storeItems($commercialQuote, $calculated['items']);
 
             if ($status !== $oldStatus) {
+                $snapshotter->ensureSnapshot($commercialQuote->fresh(['documentTemplate']));
                 $this->recordStatus($commercialQuote, $oldStatus, $status, (int) $request->user()->id, 'Guardada y enviada.');
             }
         });
@@ -178,41 +192,75 @@ class CommercialQuoteController extends Controller
             ->with('status', 'Cotizacion actualizada correctamente.');
     }
 
-    public function send(ChangeCommercialQuoteStatusRequest $request, CommercialQuote $commercialQuote)
+    public function send(ChangeCommercialQuoteStatusRequest $request, CommercialQuote $commercialQuote, CommercialTemplateSnapshotter $snapshotter)
     {
-        $this->changeStatus($request, $commercialQuote, [CommercialQuote::STATUS_DRAFT], CommercialQuote::STATUS_SENT, 'Cotizacion enviada.');
+        $this->changeStatus($request, $commercialQuote, [CommercialQuote::STATUS_DRAFT], CommercialQuote::STATUS_SENT, 'Cotizacion enviada.', $snapshotter);
 
         return back()->with('status', 'Cotizacion enviada correctamente.');
     }
 
-    public function accept(ChangeCommercialQuoteStatusRequest $request, CommercialQuote $commercialQuote)
+    public function accept(ChangeCommercialQuoteStatusRequest $request, CommercialQuote $commercialQuote, CommercialTemplateSnapshotter $snapshotter)
     {
-        $this->changeStatus($request, $commercialQuote, [CommercialQuote::STATUS_SENT], CommercialQuote::STATUS_ACCEPTED, 'Cotizacion aceptada.');
+        $this->changeStatus($request, $commercialQuote, [CommercialQuote::STATUS_SENT], CommercialQuote::STATUS_ACCEPTED, 'Cotizacion aceptada.', $snapshotter);
 
         return back()->with('status', 'Cotizacion aceptada correctamente.');
     }
 
-    public function reject(ChangeCommercialQuoteStatusRequest $request, CommercialQuote $commercialQuote)
+    public function reject(ChangeCommercialQuoteStatusRequest $request, CommercialQuote $commercialQuote, CommercialTemplateSnapshotter $snapshotter)
     {
-        $this->changeStatus($request, $commercialQuote, [CommercialQuote::STATUS_SENT], CommercialQuote::STATUS_REJECTED, 'Cotizacion rechazada.');
+        $this->changeStatus($request, $commercialQuote, [CommercialQuote::STATUS_SENT], CommercialQuote::STATUS_REJECTED, 'Cotizacion rechazada.', $snapshotter);
 
         return back()->with('status', 'Cotizacion rechazada correctamente.');
     }
 
-    public function cancel(ChangeCommercialQuoteStatusRequest $request, CommercialQuote $commercialQuote)
+    public function cancel(ChangeCommercialQuoteStatusRequest $request, CommercialQuote $commercialQuote, CommercialTemplateSnapshotter $snapshotter)
     {
-        $this->changeStatus($request, $commercialQuote, [CommercialQuote::STATUS_DRAFT, CommercialQuote::STATUS_SENT], CommercialQuote::STATUS_CANCELLED, 'Cotizacion cancelada.');
+        $this->changeStatus($request, $commercialQuote, [CommercialQuote::STATUS_DRAFT, CommercialQuote::STATUS_SENT], CommercialQuote::STATUS_CANCELLED, 'Cotizacion cancelada.', $snapshotter);
 
         return back()->with('status', 'Cotizacion cancelada correctamente.');
     }
 
-    public function print(CommercialQuote $commercialQuote)
+    public function previewDraft(StoreCommercialQuoteRequest $request, CommercialQuoteDocumentBuilder $builder)
+    {
+        $data = $request->validated();
+        $client = $this->validatedClient($data['commercial_client_id'], $request->user());
+        $this->validateRelatedIds($data, (int) $client->users_id, (int) $client->id);
+        $template = $this->validatedTemplate($data['commercial_document_template_id'] ?? null, (int) $client->users_id);
+
+        return view('comercial.cotizaciones.preview', [
+            'document' => $builder->fromPayload($data, (int) $client->users_id, $template),
+            'backUrl' => url()->previous(),
+        ]);
+    }
+
+    public function preview(CommercialQuote $commercialQuote, CommercialQuoteDocumentBuilder $builder)
     {
         $this->authorize('view', $commercialQuote);
 
-        $commercialQuote->load(['commercialClient', 'commercialContact', 'fiscalClient', 'items.taxes']);
+        return view('comercial.cotizaciones.preview', [
+            'document' => $builder->fromQuote($commercialQuote),
+            'backUrl' => route('comercial.cotizaciones.show', $commercialQuote),
+        ]);
+    }
 
-        return view('comercial.cotizaciones.print', ['quote' => $commercialQuote]);
+    public function pdf(CommercialQuote $commercialQuote, CommercialQuoteDocumentBuilder $builder)
+    {
+        $this->authorize('view', $commercialQuote);
+
+        $document = $builder->fromQuote($commercialQuote);
+
+        return Pdf::loadView('comercial.cotizaciones.pdf', ['document' => $document])
+            ->setPaper('letter')
+            ->stream(($commercialQuote->folio ?: 'cotizacion') . '.pdf');
+    }
+
+    public function print(CommercialQuote $commercialQuote, CommercialQuoteDocumentBuilder $builder)
+    {
+        $this->authorize('view', $commercialQuote);
+
+        return view('comercial.cotizaciones.print', [
+            'document' => $builder->fromQuote($commercialQuote),
+        ]);
     }
 
     public function searchProducts(Request $request)
@@ -234,8 +282,10 @@ class CommercialQuoteController extends Controller
             ->where(function ($query) use ($q) {
                 $query->where('clave', 'like', "%{$q}%")
                     ->orWhere('descripcion', 'like', "%{$q}%")
+                    ->orWhere('unidad', 'like', "%{$q}%")
                     ->orWhere('observaciones', 'like', "%{$q}%")
-                    ->orWhereHas('prodServ', fn ($sat) => $sat->where('clave', 'like', "%{$q}%")->orWhere('descripcion', 'like', "%{$q}%"));
+                    ->orWhereHas('prodServ', fn ($sat) => $sat->where('clave', 'like', "%{$q}%")->orWhere('descripcion', 'like', "%{$q}%"))
+                    ->orWhereHas('unidadSat', fn ($sat) => $sat->where('clave', 'like', "%{$q}%")->orWhere('descripcion', 'like', "%{$q}%"));
             })
             ->orderBy('descripcion')
             ->limit(20)
@@ -281,13 +331,13 @@ class CommercialQuoteController extends Controller
         ]);
     }
 
-    private function createWithRetry(array $data, CommercialClient $client, array $calculated, Request $request, CommercialQuoteFolioService $folioService): CommercialQuote
+    private function createWithRetry(array $data, CommercialClient $client, array $calculated, Request $request, CommercialQuoteFolioService $folioService, CommercialTemplateSnapshotter $snapshotter): CommercialQuote
     {
         $lastException = null;
 
         for ($attempt = 0; $attempt < 3; $attempt++) {
             try {
-                return DB::transaction(function () use ($data, $client, $calculated, $request, $folioService) {
+                return DB::transaction(function () use ($data, $client, $calculated, $request, $folioService, $snapshotter) {
                     $folio = $folioService->reserve((int) $client->users_id);
                     $status = ($data['save_action'] ?? 'draft') === 'send'
                         ? CommercialQuote::STATUS_SENT
@@ -303,6 +353,9 @@ class CommercialQuoteController extends Controller
                     ));
 
                     $this->storeItems($quote, $calculated['items']);
+                    if ($status !== CommercialQuote::STATUS_DRAFT) {
+                        $snapshotter->ensureSnapshot($quote->fresh(['documentTemplate']));
+                    }
                     $this->recordStatus($quote, null, $status, (int) $request->user()->id, 'Cotizacion creada.');
 
                     return $quote;
@@ -323,6 +376,7 @@ class CommercialQuoteController extends Controller
             'commercial_client_id' => (int) $client->id,
             'commercial_contact_id' => $data['commercial_contact_id'] ?? null,
             'fiscal_client_id' => $data['fiscal_client_id'] ?? null,
+            'commercial_document_template_id' => $data['commercial_document_template_id'] ?? null,
             'assigned_user_id' => $data['assigned_user_id'] ?? null,
             'issued_at' => $data['issued_at'],
             'expires_at' => $data['expires_at'] ?? null,
@@ -455,7 +509,7 @@ class CommercialQuoteController extends Controller
         }
     }
 
-    private function changeStatus(ChangeCommercialQuoteStatusRequest $request, CommercialQuote $quote, array $from, string $to, string $defaultNote): void
+    private function changeStatus(ChangeCommercialQuoteStatusRequest $request, CommercialQuote $quote, array $from, string $to, string $defaultNote, CommercialTemplateSnapshotter $snapshotter): void
     {
         $this->authorize('update', $quote);
 
@@ -463,9 +517,10 @@ class CommercialQuoteController extends Controller
             throw ValidationException::withMessages(['status' => 'La cotizacion no permite esa transicion de estado.']);
         }
 
-        DB::transaction(function () use ($request, $quote, $to, $defaultNote) {
+        DB::transaction(function () use ($request, $quote, $to, $defaultNote, $snapshotter) {
             $old = $quote->status;
             $quote->update(['status' => $to]);
+            $snapshotter->ensureSnapshot($quote->fresh(['documentTemplate']));
             $this->recordStatus($quote, $old, $to, (int) $request->user()->id, $request->input('note') ?: $defaultNote);
         });
     }
@@ -502,6 +557,51 @@ class CommercialQuoteController extends Controller
     private function userOptions()
     {
         return User::query()->where('active', 1)->orderBy('username')->get(['id', 'username', 'email']);
+    }
+
+    private function validatedTemplate(null|int|string $templateId, int $ownerId): ?CommercialDocumentTemplate
+    {
+        if (empty($templateId)) {
+            return null;
+        }
+
+        $template = CommercialDocumentTemplate::query()
+            ->forUser($ownerId)
+            ->forType(CommercialDocumentTemplate::TYPE_QUOTE)
+            ->where('is_active', true)
+            ->find((int) $templateId);
+
+        if (!$template) {
+            throw ValidationException::withMessages([
+                'commercial_document_template_id' => 'El formato comercial no pertenece al usuario autorizado o no esta activo.',
+            ]);
+        }
+
+        return $template;
+    }
+
+    private function templateOptions(int $ownerId, ?int $includeId = null)
+    {
+        return CommercialDocumentTemplate::query()
+            ->forUser($ownerId)
+            ->forType(CommercialDocumentTemplate::TYPE_QUOTE)
+            ->where(function ($query) use ($includeId) {
+                $query->where('is_active', true)
+                    ->when($includeId, fn ($sub) => $sub->orWhere('id', $includeId));
+            })
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->get();
+    }
+
+    private function defaultTemplateId(int $ownerId): ?int
+    {
+        return CommercialDocumentTemplate::query()
+            ->forUser($ownerId)
+            ->forType(CommercialDocumentTemplate::TYPE_QUOTE)
+            ->where('is_active', true)
+            ->where('is_default', true)
+            ->value('id');
     }
 
     private function clientOptionsForFilter(User $user)

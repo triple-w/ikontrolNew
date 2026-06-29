@@ -45,7 +45,8 @@
             'label' => 'Configuracion',
             'active' => request()->routeIs('configuracion.*') || request()->routeIs('administracion.*'),
             'items' => [
-                ['label' => 'Empresa y datos fiscales', 'route' => 'configuracion.index', 'active' => request()->routeIs('configuracion.*')],
+                ['label' => 'Empresa y datos fiscales', 'route' => 'configuracion.index', 'active' => request()->routeIs('configuracion.index')],
+                ['label' => 'Formatos de documentos', 'route' => 'configuracion.formatos-documentos.index', 'active' => request()->routeIs('configuracion.formatos-documentos.*')],
                 ['label' => 'Usuarios', 'route' => 'administracion.usuarios', 'active' => request()->routeIs('administracion.usuarios')],
                 ['label' => 'Roles y permisos', 'route' => 'administracion.roles', 'active' => request()->routeIs('administracion.roles')],
                 ['label' => 'Configuracion general', 'route' => 'administracion.general', 'active' => request()->routeIs('administracion.general')],

@@ -32,6 +32,7 @@ class CommercialQuote extends Model
         'commercial_client_id',
         'commercial_contact_id',
         'fiscal_client_id',
+        'commercial_document_template_id',
         'created_by_id',
         'assigned_user_id',
         'folio_prefix',
@@ -51,6 +52,13 @@ class CommercialQuote extends Model
         'discount_total',
         'tax_total',
         'total',
+        'template_name_snapshot',
+        'logo_path_snapshot',
+        'header_title_snapshot',
+        'header_text_snapshot',
+        'footer_text_snapshot',
+        'terms_text_snapshot',
+        'template_options_snapshot',
     ];
 
     protected $casts = [
@@ -58,6 +66,7 @@ class CommercialQuote extends Model
         'commercial_client_id' => 'integer',
         'commercial_contact_id' => 'integer',
         'fiscal_client_id' => 'integer',
+        'commercial_document_template_id' => 'integer',
         'created_by_id' => 'integer',
         'assigned_user_id' => 'integer',
         'folio_number' => 'integer',
@@ -70,6 +79,7 @@ class CommercialQuote extends Model
         'discount_total' => 'decimal:6',
         'tax_total' => 'decimal:6',
         'total' => 'decimal:6',
+        'template_options_snapshot' => 'array',
     ];
 
     public function owner(): BelongsTo
@@ -100,6 +110,11 @@ class CommercialQuote extends Model
     public function fiscalClient(): BelongsTo
     {
         return $this->belongsTo(Cliente::class, 'fiscal_client_id');
+    }
+
+    public function documentTemplate(): BelongsTo
+    {
+        return $this->belongsTo(CommercialDocumentTemplate::class, 'commercial_document_template_id');
     }
 
     public function items(): HasMany

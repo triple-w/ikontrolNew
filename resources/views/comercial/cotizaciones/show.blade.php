@@ -16,6 +16,8 @@
             @if($quote->canBeEdited())
                 <x-ikontrol.primary-link href="{{ route('comercial.cotizaciones.edit', $quote) }}">Editar</x-ikontrol.primary-link>
             @endif
+            <x-ikontrol.secondary-link href="{{ route('comercial.cotizaciones.preview', $quote) }}">Previsualizar</x-ikontrol.secondary-link>
+            <x-ikontrol.secondary-link href="{{ route('comercial.cotizaciones.pdf', $quote) }}">PDF</x-ikontrol.secondary-link>
             <x-ikontrol.secondary-link href="{{ route('comercial.cotizaciones.print', $quote) }}">Imprimir</x-ikontrol.secondary-link>
 
             @if($quote->status === \App\Models\CommercialQuote::STATUS_DRAFT)
@@ -41,6 +43,7 @@
                         <div><dt class="text-gray-500">Emision</dt><dd class="font-medium">{{ optional($quote->issued_at)->format('Y-m-d') }}</dd></div>
                         <div><dt class="text-gray-500">Vencimiento</dt><dd class="font-medium">{{ optional($quote->expires_at)->format('Y-m-d') ?: '-' }}</dd></div>
                         <div><dt class="text-gray-500">Moneda</dt><dd class="font-medium">{{ $quote->currency }}</dd></div>
+                        <div><dt class="text-gray-500">Formato comercial</dt><dd class="font-medium">{{ $quote->template_name_snapshot ?: $quote->documentTemplate?->name ?: 'Formato simple' }}</dd></div>
                         <div><dt class="text-gray-500">Creador</dt><dd class="font-medium">{{ $quote->creator?->username ?? '-' }}</dd></div>
                         <div><dt class="text-gray-500">Responsable</dt><dd class="font-medium">{{ $quote->assignedUser?->username ?? '-' }}</dd></div>
                     </dl>

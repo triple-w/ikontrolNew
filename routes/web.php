@@ -15,6 +15,7 @@ use App\Http\Controllers\OperationsController;
 use App\Http\Controllers\AdministrationController;
 use App\Http\Controllers\Commercial\CommercialClientController;
 use App\Http\Controllers\Commercial\CommercialContactController;
+use App\Http\Controllers\Commercial\CommercialDocumentTemplateController;
 use App\Http\Controllers\Commercial\CommercialQuoteController;
 
 use App\Http\Controllers\Api\SeriesController;
@@ -55,9 +56,12 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
         Route::get('cotizaciones/clientes/{commercialClient}/opciones', [CommercialQuoteController::class, 'clientOptions'])->name('cotizaciones.client-options');
         Route::get('cotizaciones', [CommercialQuoteController::class, 'index'])->name('cotizaciones.index');
         Route::get('cotizaciones/crear', [CommercialQuoteController::class, 'create'])->name('cotizaciones.create');
+        Route::post('cotizaciones/previsualizar', [CommercialQuoteController::class, 'previewDraft'])->name('cotizaciones.preview-draft');
         Route::post('cotizaciones', [CommercialQuoteController::class, 'store'])->name('cotizaciones.store');
         Route::get('cotizaciones/{commercialQuote}', [CommercialQuoteController::class, 'show'])->name('cotizaciones.show');
         Route::get('cotizaciones/{commercialQuote}/editar', [CommercialQuoteController::class, 'edit'])->name('cotizaciones.edit');
+        Route::get('cotizaciones/{commercialQuote}/previsualizar', [CommercialQuoteController::class, 'preview'])->name('cotizaciones.preview');
+        Route::get('cotizaciones/{commercialQuote}/pdf', [CommercialQuoteController::class, 'pdf'])->name('cotizaciones.pdf');
         Route::match(['put', 'patch'], 'cotizaciones/{commercialQuote}', [CommercialQuoteController::class, 'update'])->name('cotizaciones.update');
         Route::post('cotizaciones/{commercialQuote}/enviar', [CommercialQuoteController::class, 'send'])->name('cotizaciones.send');
         Route::post('cotizaciones/{commercialQuote}/aceptar', [CommercialQuoteController::class, 'accept'])->name('cotizaciones.accept');
@@ -155,6 +159,13 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
 
     // 5) Configuración
     Route::get('/configuracion', [ConfiguracionController::class, 'index'])->name('configuracion.index');
+    Route::get('/configuracion/formatos-documentos', [CommercialDocumentTemplateController::class, 'index'])->name('configuracion.formatos-documentos.index');
+    Route::get('/configuracion/formatos-documentos/crear', [CommercialDocumentTemplateController::class, 'create'])->name('configuracion.formatos-documentos.create');
+    Route::post('/configuracion/formatos-documentos', [CommercialDocumentTemplateController::class, 'store'])->name('configuracion.formatos-documentos.store');
+    Route::get('/configuracion/formatos-documentos/{template}/editar', [CommercialDocumentTemplateController::class, 'edit'])->name('configuracion.formatos-documentos.edit');
+    Route::match(['put', 'patch'], '/configuracion/formatos-documentos/{template}', [CommercialDocumentTemplateController::class, 'update'])->name('configuracion.formatos-documentos.update');
+    Route::post('/configuracion/formatos-documentos/{template}/predeterminado', [CommercialDocumentTemplateController::class, 'setDefault'])->name('configuracion.formatos-documentos.default');
+    Route::delete('/configuracion/formatos-documentos/{template}', [CommercialDocumentTemplateController::class, 'destroy'])->name('configuracion.formatos-documentos.destroy');
     Route::post('/configuracion/perfil', [ConfiguracionController::class, 'updatePerfil'])->name('configuracion.perfil');
     Route::post('/configuracion/csd', [ConfiguracionController::class, 'uploadCsd'])->name('configuracion.csd');
     Route::delete('/configuracion/logo', [ConfiguracionController::class, 'destroyLogo'])->name('configuracion.logo.destroy');

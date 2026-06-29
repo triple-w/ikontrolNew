@@ -24,6 +24,7 @@ class StoreCommercialQuoteRequest extends FormRequest
             'commercial_client_id' => ['required', 'integer', Rule::exists('commercial_clients', 'id')],
             'commercial_contact_id' => ['nullable', 'integer', Rule::exists('commercial_contacts', 'id')],
             'fiscal_client_id' => ['nullable', 'integer', Rule::exists('clientes', 'id')],
+            'commercial_document_template_id' => ['nullable', 'integer', Rule::exists('commercial_document_templates', 'id')],
             'assigned_user_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
             'issued_at' => ['required', 'date'],
             'expires_at' => ['nullable', 'date', 'after_or_equal:issued_at'],
