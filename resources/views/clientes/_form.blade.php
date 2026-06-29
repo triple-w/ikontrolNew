@@ -1,5 +1,5 @@
-@php($isEdit = isset($cliente) && $cliente->exists)
 @php
+    $isEdit = isset($cliente) && $cliente->exists;
     $linkedCommercialClients = $linkedCommercialClients ?? [];
     $commercialSearchUrl = $commercialSearchUrl ?? route('comercial.search-clientes');
 @endphp
