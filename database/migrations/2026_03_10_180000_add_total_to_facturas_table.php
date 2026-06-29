@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('facturas', function (Blueprint $table) {
             if (!Schema::hasColumn('facturas', 'total')) {
-                $table->decimal('total', 18, 2)->nullable()->after('iva');
+                $table->decimal('total', 18, 2)->nullable();
             }
         });
     }
