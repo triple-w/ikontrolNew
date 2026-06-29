@@ -14,17 +14,18 @@ return new class extends Migration
 
         Schema::create('commercial_client_fiscal_client', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('commercial_client_id')->constrained('commercial_clients')->cascadeOnDelete();
+            $table->unsignedBigInteger('commercial_client_id');
             $table->bigInteger('fiscal_client_id');
             $table->boolean('is_default')->default(false);
             $table->timestamps();
 
-            $table->unique(['commercial_client_id', 'fiscal_client_id'], 'ccfc_commercial_fiscal_unique');
-            $table->index('commercial_client_id');
-            $table->index('fiscal_client_id');
-            $table->index(['commercial_client_id', 'is_default']);
+            $table->unique(['commercial_client_id', 'fiscal_client_id'], 'ccfc_unique_link');
+            $table->index('commercial_client_id', 'ccfc_client_idx');
+            $table->index('fiscal_client_id', 'ccfc_fiscal_idx');
+            $table->index(['commercial_client_id', 'is_default'], 'ccfc_client_default_idx');
 
-            $table->foreign('fiscal_client_id')->references('id')->on('clientes')->cascadeOnDelete();
+            $table->foreign('commercial_client_id', 'ccfc_client_fk')->references('id')->on('commercial_clients')->cascadeOnDelete();
+            $table->foreign('fiscal_client_id', 'ccfc_fiscal_fk')->references('id')->on('clientes')->cascadeOnDelete();
         });
     }
 
