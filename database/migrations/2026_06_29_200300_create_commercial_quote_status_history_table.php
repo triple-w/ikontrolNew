@@ -17,12 +17,13 @@ return new class extends Migration
             $table->foreignId('commercial_quote_id')->constrained('commercial_quotes')->cascadeOnDelete();
             $table->string('old_status', 40)->nullable();
             $table->string('new_status', 40);
-            $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->bigInteger('user_id')->nullable();
             $table->text('note')->nullable();
             $table->timestamp('changed_at');
             $table->timestamps();
 
             $table->index('commercial_quote_id', 'cqsh_quote_idx');
+            $table->index('user_id', 'cqsh_user_idx');
             $table->index('new_status', 'cqsh_status_idx');
             $table->index('changed_at', 'cqsh_changed_idx');
         });
