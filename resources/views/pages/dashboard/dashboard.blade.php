@@ -1,5 +1,5 @@
 <x-app-layout>
-    <div class="px-4 sm:px-6 lg:px-8 py-8 w-full max-w-9xl mx-auto">
+    <div class="mx-auto w-full max-w-9xl min-w-0 px-4 py-8 sm:px-6 lg:px-8">
         @php
             $factucareDashboardPayload = [
                 'kpis' => $kpis ?? [],
@@ -20,16 +20,18 @@
             window.factucareDashboard = @json($factucareDashboardPayload);
         </script>
 
-        <div class="mb-8 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <x-ikontrol.page-header
-                title="Dashboard iKontrol"
-                description="Centro operativo para fiscal, comercial y operacion. Los modulos futuros ya tienen espacio reservado sin datos demo."
-                :breadcrumbs="['iKontrol', 'Inicio']"
-            />
+        <div class="mb-8 flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+            <div class="min-w-0">
+                <x-ikontrol.page-header
+                    title="Dashboard iKontrol"
+                    description="Centro operativo para fiscal, comercial y operacion. Los modulos futuros ya tienen espacio reservado sin datos demo."
+                    :breadcrumbs="['iKontrol', 'Inicio']"
+                />
+            </div>
 
-            <form method="GET" action="{{ route('dashboard') }}" class="shrink-0">
+            <form method="GET" action="{{ route('dashboard') }}" class="w-full shrink-0 sm:w-auto">
                 <select name="range"
-                        class="form-select dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-medium"
+                        class="form-select w-full dark:bg-gray-800 text-gray-600 dark:text-gray-300 font-medium sm:w-auto"
                         onchange="this.form.submit()">
                     <option value="month" @selected(($range ?? 'month') === 'month')>Este mes</option>
                     <option value="3m" @selected(($range ?? '') === '3m')>Ultimos 3 meses</option>
@@ -39,52 +41,60 @@
             </form>
         </div>
 
-        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-            <x-ikontrol.kpi-card
-                title="Facturas del periodo"
-                :value="number_format((int) ($facturasCard['count'] ?? 0))"
-                :meta="'Total fiscal: $' . number_format((float) ($facturasCard['amount'] ?? 0), 2)"
-                tone="violet"
-            >
-                <span class="text-sm font-bold">F</span>
-            </x-ikontrol.kpi-card>
+        <div class="grid min-w-0 grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+            <div class="min-w-0">
+                <x-ikontrol.kpi-card
+                    title="Facturas del periodo"
+                    :value="number_format((int) ($facturasCard['count'] ?? 0))"
+                    :meta="'Total fiscal: $' . number_format((float) ($facturasCard['amount'] ?? 0), 2)"
+                    tone="violet"
+                >
+                    <span class="text-sm font-bold">F</span>
+                </x-ikontrol.kpi-card>
+            </div>
 
-            <x-ikontrol.kpi-card
-                title="Complementos del periodo"
-                :value="number_format((int) ($complementosCard['count'] ?? 0))"
-                :meta="'Total pagos: $' . number_format((float) ($complementosCard['amount'] ?? 0), 2)"
-                tone="sky"
-            >
-                <span class="text-sm font-bold">P</span>
-            </x-ikontrol.kpi-card>
+            <div class="min-w-0">
+                <x-ikontrol.kpi-card
+                    title="Complementos del periodo"
+                    :value="number_format((int) ($complementosCard['count'] ?? 0))"
+                    :meta="'Total pagos: $' . number_format((float) ($complementosCard['amount'] ?? 0), 2)"
+                    tone="sky"
+                >
+                    <span class="text-sm font-bold">P</span>
+                </x-ikontrol.kpi-card>
+            </div>
 
-            <x-ikontrol.kpi-card
-                title="Clientes fiscales"
-                :value="number_format((int) ($clientesFiscales ?? 0))"
-                meta="Registros asociados al usuario actual"
-                tone="emerald"
-            >
-                <span class="text-sm font-bold">C</span>
-            </x-ikontrol.kpi-card>
+            <div class="min-w-0">
+                <x-ikontrol.kpi-card
+                    title="Clientes fiscales"
+                    :value="number_format((int) ($clientesFiscales ?? 0))"
+                    meta="Registros asociados al usuario actual"
+                    tone="emerald"
+                >
+                    <span class="text-sm font-bold">C</span>
+                </x-ikontrol.kpi-card>
+            </div>
 
-            <x-ikontrol.kpi-card
-                title="Pendientes operativos"
-                value="0"
-                meta="Sin modulos operativos configurados"
-                tone="amber"
-            >
-                <span class="text-sm font-bold">O</span>
-            </x-ikontrol.kpi-card>
+            <div class="min-w-0">
+                <x-ikontrol.kpi-card
+                    title="Pendientes operativos"
+                    value="0"
+                    meta="Sin modulos operativos configurados"
+                    tone="amber"
+                >
+                    <span class="text-sm font-bold">O</span>
+                </x-ikontrol.kpi-card>
+            </div>
         </div>
 
-        <div class="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
-            <div class="xl:col-span-2 space-y-6">
+        <div class="mt-6 grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-3">
+            <div class="min-w-0 space-y-6 xl:col-span-2">
                 <x-ikontrol.module-section title="Documentos fiscales" description="Resumen del periodo seleccionado con los calculos existentes del dashboard.">
-                    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-3">
                         @foreach(($kpis ?? []) as $label => $kpi)
-                            <div class="rounded-lg border border-gray-200 dark:border-gray-700/60 p-4">
+                            <div class="min-w-0 rounded-lg border border-gray-200 p-4 dark:border-gray-700/60">
                                 <div class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ ucfirst($label) }}</div>
-                                <div class="mt-2 text-2xl font-bold text-gray-800 dark:text-gray-100">${{ number_format((float) ($kpi['actual'] ?? 0), 2) }}</div>
+                                <div class="mt-2 break-words text-2xl font-bold text-gray-800 dark:text-gray-100">${{ number_format((float) ($kpi['actual'] ?? 0), 2) }}</div>
                                 <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                     Periodo anterior: ${{ number_format((float) ($kpi['previo'] ?? 0), 2) }}
                                 </div>
@@ -96,7 +106,7 @@
                 <x-dashboard.dashboard-card-15 :monthlyChart="$monthlyChart" />
             </div>
 
-            <div class="space-y-6">
+            <div class="min-w-0 space-y-6">
                 <x-ikontrol.module-section title="Accesos rapidos">
                     <div class="grid grid-cols-1 gap-3">
                         <x-ikontrol.primary-link href="{{ route('facturas.create') }}">Crear factura</x-ikontrol.primary-link>

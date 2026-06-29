@@ -11,7 +11,7 @@
     $profileUrl = Route::has('profile.show') ? route('profile.show') : route('configuracion.index') . '#cuenta';
 @endphp
 
-<div class="relative inline-flex" x-data="{ open: false }">
+<div class="relative inline-flex shrink-0" x-data="{ open: false }">
     <button
         class="inline-flex justify-center items-center group"
         aria-haspopup="true"
@@ -27,7 +27,7 @@
         </div>
     </button>
     <div
-        class="origin-top-right z-10 absolute top-full min-w-52 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700/60 py-1.5 rounded-lg shadow-lg overflow-hidden mt-1 {{$align === 'right' ? 'right-0' : 'left-0'}}"
+        class="origin-top-right z-10 absolute top-full w-56 max-w-[calc(100vw-2rem)] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700/60 py-1.5 rounded-lg shadow-lg overflow-hidden mt-1 {{$align === 'right' ? 'right-0' : 'left-0'}}"
         @click.outside="open = false"
         @keydown.escape.window="open = false"
         x-show="open"

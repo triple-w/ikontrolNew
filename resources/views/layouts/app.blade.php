@@ -33,18 +33,8 @@
     </head>
     <body
         class="font-inter antialiased bg-gray-100 dark:bg-gray-900 text-gray-600 dark:text-gray-400"
-        :class="{ 'sidebar-expanded': sidebarExpanded }"
-        x-data="{ sidebarOpen: false, sidebarExpanded: localStorage.getItem('sidebar-expanded') == 'true' }"
-        x-init="$watch('sidebarExpanded', value => localStorage.setItem('sidebar-expanded', value))"    
+        x-data="{ sidebarOpen: false }"
     >
-
-        <script>
-            if (localStorage.getItem('sidebar-expanded') == 'true') {
-                document.querySelector('body').classList.add('sidebar-expanded');
-            } else {
-                document.querySelector('body').classList.remove('sidebar-expanded');
-            }
-        </script>
 
         @php
         $sidebarVariant = $sidebarVariant ?? 'default';
@@ -54,10 +44,10 @@
 
         <!-- Page wrapper -->
         <div class="flex h-[100dvh] overflow-hidden">
-        <x-app.sidebar :variant="$attributes->get('sidebarVariant', 'default')" />
+            <x-app.sidebar :variant="$attributes->get('sidebarVariant', 'default')" />
 
-        <div class="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden {{ $background }}" x-ref="contentarea">
-            <x-app.header :variant="$attributes->get('headerVariant', 'default')" />
+            <div class="relative flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden {{ $background }}" x-ref="contentarea">
+                <x-app.header :variant="$attributes->get('headerVariant', 'default')" />
 
                 <main class="grow">
                     {{-- Si la vista usa <x-app-layout> puede venir un slot llamado "header" --}}
