@@ -113,7 +113,7 @@
                         <x-ikontrol.secondary-link href="{{ route('complementos.create') }}">Crear complemento</x-ikontrol.secondary-link>
                         <x-ikontrol.secondary-link href="{{ route('clientes.create') }}">Crear cliente fiscal</x-ikontrol.secondary-link>
                         <x-ikontrol.secondary-link href="{{ route('productos.create') }}">Crear producto</x-ikontrol.secondary-link>
-                        <x-ikontrol.secondary-link href="{{ route('comercial.cotizaciones') }}">Crear cotizacion futura</x-ikontrol.secondary-link>
+                        <x-ikontrol.secondary-link href="{{ route('comercial.cotizaciones.create') }}">Crear cotización</x-ikontrol.secondary-link>
                         <x-ikontrol.secondary-link href="{{ route('operacion.actividades') }}">Crear actividad futura</x-ikontrol.secondary-link>
                     </div>
                 </x-ikontrol.module-section>

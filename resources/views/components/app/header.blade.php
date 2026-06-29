@@ -65,7 +65,7 @@
                         <a href="{{ route('facturas.create') }}" class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60">Crear factura</a>
                         <a href="{{ route('complementos.create') }}" class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60">Crear complemento</a>
                         <a href="{{ route('clientes.create') }}" class="block px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/60">Crear cliente fiscal</a>
-                        <a href="{{ route('comercial.cotizaciones') }}" class="block px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-700/60">Crear cotizacion futura</a>
+                        <a href="{{ route('comercial.cotizaciones.create') }}" class="block px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-700/60">Crear cotización</a>
                     </div>
                 </div>
 
