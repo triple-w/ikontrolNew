@@ -39,6 +39,8 @@ class UpdateCommercialClientRequest extends FormRequest
             'fiscal_client_ids' => ['nullable', 'array'],
             'fiscal_client_ids.*' => ['integer', Rule::exists('clientes', 'id')],
             'default_fiscal_client_id' => ['nullable', 'integer', Rule::exists('clientes', 'id')],
+            'confirm_without_default' => ['nullable', 'boolean'],
+            'duplicate_confirmed' => ['nullable', 'boolean'],
         ];
     }
 
@@ -57,14 +59,18 @@ class UpdateCommercialClientRequest extends FormRequest
                 ->when($email !== '', fn ($query) => $query->where('email', $email))
                 ->exists();
 
-            if ($duplicate) {
-                $validator->errors()->add('name', 'Ya existe un cliente comercial con ese nombre y correo.');
+            if ($duplicate && !$this->boolean('duplicate_confirmed')) {
+                $validator->errors()->add('duplicate_confirmed', 'Encontramos un cliente comercial parecido. Confirma que deseas guardar este registro como distinto.');
             }
 
             $selected = collect($this->input('fiscal_client_ids', []))->map(fn ($id) => (int) $id)->filter()->values();
             $defaultId = (int) $this->input('default_fiscal_client_id', 0);
             if ($defaultId > 0 && !$selected->contains($defaultId)) {
                 $validator->errors()->add('default_fiscal_client_id', 'El receptor fiscal predeterminado debe estar seleccionado.');
+            }
+
+            if ($selected->isNotEmpty() && $defaultId === 0 && !$this->boolean('confirm_without_default')) {
+                $validator->errors()->add('confirm_without_default', 'Elige un receptor fiscal predeterminado o confirma que el cliente quedara sin predeterminado.');
             }
         });
     }

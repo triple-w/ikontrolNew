@@ -19,6 +19,8 @@ class CommercialClientsTest extends TestCase
         DB::purge('sqlite');
         DB::reconnect('sqlite');
 
+        config()->set('sat.regimenes_fiscales', ['601' => 'General de Ley Personas Morales']);
+
         $this->createSchema();
     }
 
@@ -135,6 +137,134 @@ class CommercialClientsTest extends TestCase
         ]);
     }
 
+    public function test_commercial_client_can_be_created_from_existing_fiscal_client(): void
+    {
+        $user = $this->createUser();
+        $fiscalId = $this->createFiscalClient($user->id, 'AAA010101AAA');
+
+        $response = $this->actingAs($user)->post(route('comercial.clientes.store'), [
+            'name' => 'Fiscal AAA010101AAA',
+            'business_name' => 'Fiscal AAA010101AAA',
+            'client_type' => 'company',
+            'email' => 'fiscal@example.test',
+            'phone' => '5551234567',
+            'is_active' => '1',
+            'fiscal_client_ids' => [$fiscalId],
+        ]);
+
+        $response->assertRedirect();
+
+        $clientId = DB::table('commercial_clients')->where('name', 'Fiscal AAA010101AAA')->value('id');
+
+        $this->assertDatabaseHas('commercial_client_fiscal_client', [
+            'commercial_client_id' => $clientId,
+            'fiscal_client_id' => $fiscalId,
+            'is_default' => 1,
+        ]);
+    }
+
+    public function test_fiscal_client_can_be_created_from_existing_commercial_client(): void
+    {
+        $user = $this->createUser();
+        $commercialId = $this->createCommercialClient($user->id, 'Cliente Comercial');
+
+        $response = $this->actingAs($user)->post(route('clientes.store'), [
+            'rfc' => 'CCC010101CCC',
+            'razon_social' => 'Cliente Comercial Fiscal',
+            'regimen_fiscal' => '601',
+            'email' => 'fiscal-comercial@example.test',
+            'commercial_client_ids' => [$commercialId],
+        ]);
+
+        $response->assertRedirect();
+
+        $fiscalId = DB::table('clientes')->where('rfc', 'CCC010101CCC')->value('id');
+
+        $this->assertDatabaseHas('commercial_client_fiscal_client', [
+            'commercial_client_id' => $commercialId,
+            'fiscal_client_id' => $fiscalId,
+            'is_default' => 1,
+        ]);
+    }
+
+    public function test_existing_link_is_not_duplicated(): void
+    {
+        $user = $this->createUser();
+        $commercialId = $this->createCommercialClient($user->id, 'Cliente Comercial');
+        $fiscalId = $this->createFiscalClient($user->id, 'DDD010101DDD');
+
+        DB::table('commercial_client_fiscal_client')->insert([
+            'commercial_client_id' => $commercialId,
+            'fiscal_client_id' => $fiscalId,
+            'is_default' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($user)->put(route('clientes.update', $fiscalId), [
+            'rfc' => 'DDD010101DDD',
+            'razon_social' => 'Fiscal DDD010101DDD',
+            'regimen_fiscal' => '601',
+            'commercial_client_ids' => [$commercialId],
+        ])->assertRedirect();
+
+        $this->assertSame(1, DB::table('commercial_client_fiscal_client')
+            ->where('commercial_client_id', $commercialId)
+            ->where('fiscal_client_id', $fiscalId)
+            ->count());
+    }
+
+    public function test_fiscal_client_cannot_link_to_other_users_commercial_client(): void
+    {
+        $owner = $this->createUser('owner2@example.test', 'OWNER2');
+        $other = $this->createUser('other2@example.test', 'OTHER2');
+        $foreignCommercialId = $this->createCommercialClient($other->id, 'Cliente Ajeno');
+
+        $response = $this->actingAs($owner)->post(route('clientes.store'), [
+            'rfc' => 'EEE010101EEE',
+            'razon_social' => 'Fiscal Propio',
+            'regimen_fiscal' => '601',
+            'commercial_client_ids' => [$foreignCommercialId],
+        ]);
+
+        $response->assertSessionHasErrors('commercial_client_ids');
+        $this->assertDatabaseMissing('commercial_client_fiscal_client', [
+            'commercial_client_id' => $foreignCommercialId,
+        ]);
+    }
+
+    public function test_fiscal_creation_does_not_replace_existing_default(): void
+    {
+        $user = $this->createUser();
+        $commercialId = $this->createCommercialClient($user->id, 'Cliente con default');
+        $defaultFiscalId = $this->createFiscalClient($user->id, 'FFF010101FFF');
+
+        DB::table('commercial_client_fiscal_client')->insert([
+            'commercial_client_id' => $commercialId,
+            'fiscal_client_id' => $defaultFiscalId,
+            'is_default' => 1,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($user)->post(route('clientes.store'), [
+            'rfc' => 'GGG010101GGG',
+            'razon_social' => 'Segundo Fiscal',
+            'regimen_fiscal' => '601',
+            'commercial_client_ids' => [$commercialId],
+        ])->assertRedirect();
+
+        $this->assertSame(1, DB::table('commercial_client_fiscal_client')
+            ->where('commercial_client_id', $commercialId)
+            ->where('is_default', 1)
+            ->count());
+        $this->assertDatabaseHas('commercial_client_fiscal_client', [
+            'commercial_client_id' => $commercialId,
+            'fiscal_client_id' => $defaultFiscalId,
+            'is_default' => 1,
+        ]);
+    }
+
     private function createSchema(): void
     {
         Schema::create('users', function ($table) {
@@ -155,6 +285,17 @@ class CommercialClientsTest extends TestCase
             $table->string('rfc', 30);
             $table->string('razon_social', 200);
             $table->string('email', 90)->nullable();
+            $table->string('telefono', 30)->nullable();
+            $table->string('calle', 100)->nullable();
+            $table->string('no_ext', 20)->nullable();
+            $table->string('no_int', 20)->nullable();
+            $table->string('colonia', 50)->nullable();
+            $table->string('municipio', 50)->nullable();
+            $table->string('localidad', 50)->nullable();
+            $table->string('estado', 50)->nullable();
+            $table->string('codigo_postal', 10)->nullable();
+            $table->string('pais', 30)->nullable();
+            $table->string('nombre_contacto', 150)->nullable();
             $table->bigInteger('users_id');
             $table->string('regimen_fiscal', 5)->default('');
         });

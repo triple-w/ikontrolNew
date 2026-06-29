@@ -35,6 +35,8 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
 
     Route::prefix('comercial')->name('comercial.')->group(function () {
         Route::get('clientes', [CommercialClientController::class, 'index'])->name('clientes.index');
+        Route::get('clientes/search/fiscales', [CommercialClientController::class, 'searchFiscalClients'])->name('clientes.search-fiscales');
+        Route::get('search/clientes', [ClientesController::class, 'searchCommercialClients'])->name('search-clientes');
         Route::get('clientes/crear', [CommercialClientController::class, 'create'])->name('clientes.create');
         Route::post('clientes', [CommercialClientController::class, 'store'])->name('clientes.store');
         Route::get('clientes/{commercialClient}', [CommercialClientController::class, 'show'])->name('clientes.show');

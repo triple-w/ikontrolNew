@@ -80,10 +80,26 @@ class CommercialClientController extends Controller
                 'is_active' => true,
             ]),
             'users' => $this->userOptions(),
-            'fiscalClients' => $this->fiscalClientOptions(),
+            'fiscalClients' => collect(),
             'selectedFiscalIds' => [],
             'defaultFiscalId' => null,
+            'fiscalSearchUrl' => route('comercial.clientes.search-fiscales'),
+            'linkedFiscalClients' => [],
         ]);
+    }
+
+    public function searchFiscalClients(Request $request)
+    {
+        $this->authorize('create', CommercialClient::class);
+
+        $q = trim((string) $request->query('q', ''));
+
+        $clients = $this->fiscalClientOptions((int) $request->user()->id, $q)
+            ->take(12)
+            ->map(fn (Cliente $cliente) => $this->fiscalClientPayload($cliente))
+            ->values();
+
+        return response()->json(['data' => $clients]);
     }
 
     public function store(StoreCommercialClientRequest $request)
@@ -123,13 +139,19 @@ class CommercialClientController extends Controller
         $this->authorize('update', $commercialClient);
 
         $commercialClient->load('fiscalClients');
+        $defaultFiscalId = optional($commercialClient->defaultFiscalClient()->first())->id;
 
         return view('comercial.clientes.edit', [
             'commercialClient' => $commercialClient,
             'users' => $this->userOptions(),
-            'fiscalClients' => $this->fiscalClientOptions((int) $commercialClient->users_id),
+            'fiscalClients' => $commercialClient->fiscalClients,
             'selectedFiscalIds' => $commercialClient->fiscalClients->pluck('id')->map(fn ($id) => (int) $id)->all(),
-            'defaultFiscalId' => optional($commercialClient->defaultFiscalClient()->first())->id,
+            'defaultFiscalId' => $defaultFiscalId,
+            'fiscalSearchUrl' => route('comercial.clientes.search-fiscales'),
+            'linkedFiscalClients' => $commercialClient->fiscalClients
+                ->map(fn (Cliente $cliente) => $this->fiscalClientPayload($cliente, (int) $defaultFiscalId === (int) $cliente->id))
+                ->values()
+                ->all(),
         ]);
     }
 
@@ -191,11 +213,17 @@ class CommercialClientController extends Controller
             ->values();
 
         if ($selected->isEmpty()) {
-            $commercialClient->fiscalClients()->sync([]);
-            return;
+            if ($request->boolean('confirm_without_default') || $commercialClient->fiscalClients()->count() === 0) {
+                $commercialClient->fiscalClients()->sync([]);
+                return;
+            }
+
+            throw ValidationException::withMessages([
+                'confirm_without_default' => 'Confirma que el cliente quedara sin receptor fiscal predeterminado.',
+            ]);
         }
 
-        $allowed = $this->fiscalClientOptions((int) $commercialClient->users_id)
+        $allowed = $this->fiscalClientQuery((int) $commercialClient->users_id)
             ->whereIn('id', $selected)
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
@@ -208,6 +236,10 @@ class CommercialClientController extends Controller
         }
 
         $defaultId = (int) $request->input('default_fiscal_client_id', 0);
+        if ($defaultId === 0 && !$request->boolean('confirm_without_default')) {
+            $defaultId = (int) $allowed->first();
+        }
+
         $sync = [];
         foreach ($allowed as $fiscalId) {
             $sync[$fiscalId] = ['is_default' => $defaultId > 0 && $defaultId === (int) $fiscalId];
@@ -224,12 +256,61 @@ class CommercialClientController extends Controller
             ->get(['id', 'username', 'email']);
     }
 
-    private function fiscalClientOptions(?int $userId = null)
+    private function fiscalClientOptions(?int $userId = null, string $q = '')
+    {
+        return $this->fiscalClientQuery($userId ?? (int) auth()->id(), $q)
+            ->orderBy('razon_social')
+            ->get([
+                'id',
+                'rfc',
+                'razon_social',
+                'email',
+                'telefono',
+                'calle',
+                'no_ext',
+                'no_int',
+                'colonia',
+                'municipio',
+                'localidad',
+                'estado',
+                'codigo_postal',
+                'pais',
+            ]);
+    }
+
+    private function fiscalClientQuery(int $userId, string $q = '')
     {
         return Cliente::query()
-            ->forUser($userId ?? (int) auth()->id())
-            ->orderBy('razon_social')
-            ->get(['id', 'rfc', 'razon_social']);
+            ->forUser($userId)
+            ->when($q !== '', function ($query) use ($q) {
+                $query->where(function ($sub) use ($q) {
+                    $sub->where('razon_social', 'like', "%{$q}%")
+                        ->orWhere('rfc', 'like', "%{$q}%")
+                        ->orWhere('email', 'like', "%{$q}%")
+                        ->orWhere('telefono', 'like', "%{$q}%");
+                });
+            });
+    }
+
+    private function fiscalClientPayload(Cliente $cliente, bool $isDefault = false): array
+    {
+        return [
+            'id' => (int) $cliente->id,
+            'rfc' => (string) ($cliente->rfc ?? ''),
+            'razon_social' => (string) ($cliente->razon_social ?? ''),
+            'email' => (string) ($cliente->email ?? ''),
+            'telefono' => (string) ($cliente->telefono ?? ''),
+            'calle' => (string) ($cliente->calle ?? ''),
+            'no_ext' => (string) ($cliente->no_ext ?? ''),
+            'no_int' => (string) ($cliente->no_int ?? ''),
+            'colonia' => (string) ($cliente->colonia ?? ''),
+            'municipio' => (string) ($cliente->municipio ?? ''),
+            'localidad' => (string) ($cliente->localidad ?? ''),
+            'estado' => (string) ($cliente->estado ?? ''),
+            'codigo_postal' => (string) ($cliente->codigo_postal ?? ''),
+            'pais' => (string) ($cliente->pais ?? ''),
+            'is_default' => $isDefault,
+        ];
     }
 
     private function isAdmin(User $user): bool

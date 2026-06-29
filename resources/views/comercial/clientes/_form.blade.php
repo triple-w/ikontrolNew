@@ -1,6 +1,8 @@
 @php
     $selectedFiscalIds = collect(old('fiscal_client_ids', $selectedFiscalIds ?? []))->map(fn($id) => (int) $id)->all();
     $defaultFiscalId = (int) old('default_fiscal_client_id', $defaultFiscalId ?? 0);
+    $linkedFiscalClients = $linkedFiscalClients ?? [];
+    $fiscalSearchUrl = $fiscalSearchUrl ?? route('comercial.clientes.search-fiscales');
 @endphp
 
 @if($errors->any())
@@ -14,7 +16,11 @@
     </div>
 @endif
 
-<form method="POST" action="{{ $action }}" class="space-y-6">
+<form method="POST" action="{{ $action }}" class="space-y-6" x-data="commercialClientFiscalLinks({
+    searchUrl: @js($fiscalSearchUrl),
+    initial: @js($linkedFiscalClients),
+    defaultId: @js($defaultFiscalId),
+})">
     @csrf
     @if($method !== 'POST')
         @method($method)
@@ -112,26 +118,71 @@
         </div>
     </x-ikontrol.module-section>
 
-    <x-ikontrol.module-section title="Receptores fiscales relacionados" description="Opcional. No modifica el catalogo fiscal existente.">
-        @if($fiscalClients->isEmpty())
-            <x-ikontrol.empty-state title="Sin clientes fiscales disponibles" message="Puedes guardar el cliente comercial y relacionarlo despues." />
-        @else
-            <div class="space-y-3">
-                @foreach($fiscalClients as $fiscal)
-                    <label class="flex items-start gap-3 rounded-lg border border-gray-200 dark:border-gray-700/60 p-3">
-                        <input type="checkbox" name="fiscal_client_ids[]" value="{{ $fiscal->id }}" @checked(in_array((int)$fiscal->id, $selectedFiscalIds, true)) class="mt-1 rounded border-gray-300">
-                        <span class="grow">
-                            <span class="block font-medium text-gray-800 dark:text-gray-100">{{ $fiscal->razon_social }}</span>
-                            <span class="block text-xs text-gray-500">{{ $fiscal->rfc }}</span>
-                        </span>
-                        <span class="flex items-center gap-2 text-xs text-gray-500">
-                            <input type="radio" name="default_fiscal_client_id" value="{{ $fiscal->id }}" @checked($defaultFiscalId === (int)$fiscal->id) class="border-gray-300">
-                            Predeterminado
-                        </span>
-                    </label>
-                @endforeach
+    <x-ikontrol.module-section title="Usar cliente fiscal existente" description="Opcional. Puedes reutilizar datos de contacto y direccion sin modificar el catalogo fiscal.">
+        <div class="space-y-4">
+            <div class="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+                <input
+                    type="search"
+                    x-model="query"
+                    @input.debounce.350ms="search"
+                    class="w-full rounded-md border-gray-300 dark:bg-gray-800 dark:border-gray-700"
+                    placeholder="Buscar por razon social, RFC, correo o telefono"
+                >
+                <button type="button" @click="search" class="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">
+                    Buscar
+                </button>
             </div>
-        @endif
+
+            <div x-show="results.length" x-cloak class="space-y-2">
+                <template x-for="item in results" :key="item.id">
+                    <button type="button" @click="addFiscal(item, true)" class="block w-full rounded-lg border border-gray-200 p-3 text-left transition hover:border-violet-300 hover:bg-violet-50/50">
+                        <span class="block font-medium text-gray-800" x-text="item.razon_social || 'Sin razon social'"></span>
+                        <span class="mt-1 block text-xs text-gray-500" x-text="`${item.rfc || 'Sin RFC'} - ${item.email || 'Sin correo'} - ${item.telefono || 'Sin telefono'}`"></span>
+                    </button>
+                </template>
+            </div>
+
+            <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                Solo se copian campos compatibles: nombre, correo, telefono y direccion. No se modifica RFC, regimen fiscal ni ningun dato SAT.
+            </div>
+
+            <template x-if="linked.length === 0">
+                <x-ikontrol.empty-state title="Sin receptores fiscales relacionados" message="Puedes guardar el cliente comercial sin relacion fiscal." />
+            </template>
+
+            <div class="space-y-3" x-show="linked.length" x-cloak>
+                <template x-for="item in linked" :key="item.id">
+                    <div class="rounded-lg border border-gray-200 p-3">
+                        <input type="hidden" name="fiscal_client_ids[]" :value="item.id">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                                <div class="font-medium text-gray-800" x-text="item.razon_social"></div>
+                                <div class="text-xs text-gray-500" x-text="`${item.rfc || 'Sin RFC'} - ${item.email || 'Sin correo'}`"></div>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-3 text-sm">
+                                <label class="inline-flex items-center gap-2">
+                                    <input type="radio" name="default_fiscal_client_id" :value="item.id" x-model="defaultId" class="border-gray-300">
+                                    Predeterminado
+                                </label>
+                                <button type="button" @click="removeFiscal(item.id)" class="text-red-600 hover:underline">Quitar</button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <label class="flex items-start gap-2 text-sm text-gray-600">
+                <input type="checkbox" name="confirm_without_default" value="1" class="mt-1 rounded border-gray-300">
+                <span>Confirmo que puede quedar sin receptor fiscal predeterminado.</span>
+            </label>
+        </div>
+    </x-ikontrol.module-section>
+
+    <x-ikontrol.module-section title="Revision de duplicados">
+        <label class="flex items-start gap-2 text-sm text-gray-600">
+            <input type="checkbox" name="duplicate_confirmed" value="1" class="mt-1 rounded border-gray-300">
+            <span>Confirmo que este cliente comercial es un registro distinto aunque exista uno parecido.</span>
+        </label>
     </x-ikontrol.module-section>
 
     <x-ikontrol.module-section title="Notas internas">
@@ -143,3 +194,76 @@
         <a href="{{ route('comercial.clientes.index') }}" class="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">Cancelar</a>
     </div>
 </form>
+
+@once
+    @push('scripts')
+        <script>
+            document.addEventListener('alpine:init', () => {
+                Alpine.data('commercialClientFiscalLinks', (config) => ({
+                    searchUrl: config.searchUrl,
+                    query: '',
+                    results: [],
+                    linked: Array.isArray(config.initial) ? config.initial : [],
+                    defaultId: config.defaultId ? String(config.defaultId) : '',
+                    async search() {
+                        if (this.query.trim().length < 2) {
+                            this.results = [];
+                            return;
+                        }
+
+                        const response = await fetch(`${this.searchUrl}?q=${encodeURIComponent(this.query.trim())}`, {
+                            headers: { 'Accept': 'application/json' },
+                        });
+                        const payload = await response.json();
+                        this.results = Array.isArray(payload.data) ? payload.data : [];
+                    },
+                    addFiscal(item, copy) {
+                        if (!this.linked.some((current) => Number(current.id) === Number(item.id))) {
+                            this.linked.push(item);
+                        }
+
+                        if (!this.defaultId) {
+                            this.defaultId = String(item.id);
+                        }
+
+                        if (copy) {
+                            this.fillCompatible(item);
+                        }
+                    },
+                    removeFiscal(id) {
+                        if (!confirm('Quitar relacion con este receptor fiscal? No se borrara el cliente fiscal.')) {
+                            return;
+                        }
+
+                        this.linked = this.linked.filter((item) => Number(item.id) !== Number(id));
+                        if (String(this.defaultId) === String(id)) {
+                            this.defaultId = '';
+                        }
+                    },
+                    fillCompatible(item) {
+                        this.setField('name', item.razon_social);
+                        this.setField('business_name', item.razon_social);
+                        this.setField('email', item.email);
+                        this.setField('phone', item.telefono);
+                        this.setField('street', item.calle);
+                        this.setField('exterior_number', item.no_ext);
+                        this.setField('interior_number', item.no_int);
+                        this.setField('neighborhood', item.colonia);
+                        this.setField('city', item.municipio || item.localidad);
+                        this.setField('state', item.estado);
+                        this.setField('country', item.pais || 'Mexico');
+                        this.setField('postal_code', item.codigo_postal);
+                    },
+                    setField(name, value) {
+                        if (!value) return;
+                        const field = this.$root.querySelector(`[name="${name}"]`);
+                        if (field && !field.value) {
+                            field.value = value;
+                            field.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    },
+                }));
+            });
+        </script>
+    @endpush
+@endonce
