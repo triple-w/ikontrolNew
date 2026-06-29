@@ -79,4 +79,19 @@ class CommercialClient extends Model
     {
         return $query->where('is_active', true);
     }
+
+    public function scopeVisibleToQuoteUser(Builder $query, User $user): Builder
+    {
+        $role = strtoupper((string) ($user->rol ?? ''));
+        $isAdmin = (int) ($user->admin ?? 0) === 1 || str_contains($role, 'ADMIN');
+
+        if ($isAdmin) {
+            return $query;
+        }
+
+        return $query->where(function ($visible) use ($user) {
+            $visible->where('users_id', $user->id)
+                ->orWhere('assigned_user_id', $user->id);
+        });
+    }
 }

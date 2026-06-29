@@ -13,7 +13,7 @@
             'items' => [
                 ['label' => 'Clientes', 'route' => 'comercial.clientes.index', 'active' => request()->routeIs('comercial.clientes.*')],
                 ['label' => 'Contactos', 'route' => 'comercial.contactos.index', 'active' => request()->routeIs('comercial.contactos.*')],
-                ['label' => 'Cotizaciones', 'route' => 'comercial.cotizaciones', 'active' => request()->routeIs('comercial.cotizaciones')],
+                ['label' => 'Cotizaciones', 'route' => 'comercial.cotizaciones.index', 'active' => request()->routeIs('comercial.cotizaciones.*')],
                 ['label' => 'Remisiones', 'route' => 'comercial.remisiones', 'active' => request()->routeIs('comercial.remisiones')],
                 ['label' => 'Cuentas por cobrar', 'route' => 'comercial.cuentas-cobrar', 'active' => request()->routeIs('comercial.cuentas-cobrar')],
                 ['label' => 'Pagos operativos', 'route' => 'comercial.pagos-operativos', 'active' => request()->routeIs('comercial.pagos-operativos')],

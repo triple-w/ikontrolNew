@@ -15,6 +15,7 @@ use App\Http\Controllers\OperationsController;
 use App\Http\Controllers\AdministrationController;
 use App\Http\Controllers\Commercial\CommercialClientController;
 use App\Http\Controllers\Commercial\CommercialContactController;
+use App\Http\Controllers\Commercial\CommercialQuoteController;
 
 use App\Http\Controllers\Api\SeriesController;
 use App\Http\Controllers\Api\ProductosApiController;
@@ -50,7 +51,19 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
         Route::match(['put', 'patch'], 'clientes/{commercialClient}/contactos/{commercialContact}', [CommercialContactController::class, 'update'])->name('contactos.update');
         Route::delete('clientes/{commercialClient}/contactos/{commercialContact}', [CommercialContactController::class, 'destroy'])->name('contactos.destroy');
 
-        Route::get('cotizaciones', [CommercialController::class, 'cotizaciones'])->name('cotizaciones');
+        Route::get('cotizaciones/search/productos', [CommercialQuoteController::class, 'searchProducts'])->name('cotizaciones.search-productos');
+        Route::get('cotizaciones/clientes/{commercialClient}/opciones', [CommercialQuoteController::class, 'clientOptions'])->name('cotizaciones.client-options');
+        Route::get('cotizaciones', [CommercialQuoteController::class, 'index'])->name('cotizaciones.index');
+        Route::get('cotizaciones/crear', [CommercialQuoteController::class, 'create'])->name('cotizaciones.create');
+        Route::post('cotizaciones', [CommercialQuoteController::class, 'store'])->name('cotizaciones.store');
+        Route::get('cotizaciones/{commercialQuote}', [CommercialQuoteController::class, 'show'])->name('cotizaciones.show');
+        Route::get('cotizaciones/{commercialQuote}/editar', [CommercialQuoteController::class, 'edit'])->name('cotizaciones.edit');
+        Route::match(['put', 'patch'], 'cotizaciones/{commercialQuote}', [CommercialQuoteController::class, 'update'])->name('cotizaciones.update');
+        Route::post('cotizaciones/{commercialQuote}/enviar', [CommercialQuoteController::class, 'send'])->name('cotizaciones.send');
+        Route::post('cotizaciones/{commercialQuote}/aceptar', [CommercialQuoteController::class, 'accept'])->name('cotizaciones.accept');
+        Route::post('cotizaciones/{commercialQuote}/rechazar', [CommercialQuoteController::class, 'reject'])->name('cotizaciones.reject');
+        Route::post('cotizaciones/{commercialQuote}/cancelar', [CommercialQuoteController::class, 'cancel'])->name('cotizaciones.cancel');
+        Route::get('cotizaciones/{commercialQuote}/imprimir', [CommercialQuoteController::class, 'print'])->name('cotizaciones.print');
         Route::get('remisiones', [CommercialController::class, 'remisiones'])->name('remisiones');
         Route::get('cuentas-por-cobrar', [CommercialController::class, 'cuentasCobrar'])->name('cuentas-cobrar');
         Route::get('pagos-operativos', [CommercialController::class, 'pagosOperativos'])->name('pagos-operativos');
