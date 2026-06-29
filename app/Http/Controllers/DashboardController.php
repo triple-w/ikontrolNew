@@ -20,7 +20,7 @@ class DashboardController extends Controller
 
         $ttl = max(60, Carbon::now()->diffInSeconds(Carbon::now()->endOfDay()));
         $cacheKey = implode('.', [
-            'dashboard.v2',
+            'dashboard.ikontrol.v1',
             $userId,
             $range,
             $start->format('Ymd'),
@@ -38,6 +38,7 @@ class DashboardController extends Controller
                 'kpis' => $kpis,
                 'documentCards' => $this->buildDocumentCards($userId, $start, $end),
                 'monthlyChart' => $this->buildMonthlyChart($userId, $start, $end),
+                'clientesFiscales' => $this->countClientesFiscales($userId),
             ];
         });
 
@@ -53,6 +54,7 @@ class DashboardController extends Controller
             'kpis' => $dashboard['kpis'],
             'documentCards' => $dashboard['documentCards'],
             'monthlyChart' => $dashboard['monthlyChart'],
+            'clientesFiscales' => $dashboard['clientesFiscales'],
             'range' => $range,
         ]);
     }
@@ -551,5 +553,16 @@ class DashboardController extends Controller
         $this->applyComplementosDateFilter($q, $start, $end);
 
         return (int) $q->count();
+    }
+
+    private function countClientesFiscales(int $userId): int
+    {
+        if (!Schema::hasTable('clientes')) {
+            return 0;
+        }
+
+        return (int) DB::table('clientes')
+            ->where('users_id', $userId)
+            ->count();
     }
 }

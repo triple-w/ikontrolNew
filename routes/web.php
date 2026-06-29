@@ -10,6 +10,11 @@ use App\Http\Controllers\FacturasController;
 use App\Http\Controllers\ComplementosController;
 use App\Http\Controllers\ConfiguracionController;
 use App\Http\Controllers\ReportesController;
+use App\Http\Controllers\CommercialController;
+use App\Http\Controllers\OperationsController;
+use App\Http\Controllers\AdministrationController;
+use App\Http\Controllers\Commercial\CommercialClientController;
+use App\Http\Controllers\Commercial\CommercialContactController;
 
 use App\Http\Controllers\Api\SeriesController;
 use App\Http\Controllers\Api\ProductosApiController;
@@ -27,6 +32,34 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
 
     // 1) Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
+    Route::prefix('comercial')->name('comercial.')->group(function () {
+        Route::get('clientes', [CommercialClientController::class, 'index'])->name('clientes.index');
+        Route::get('clientes/crear', [CommercialClientController::class, 'create'])->name('clientes.create');
+        Route::post('clientes', [CommercialClientController::class, 'store'])->name('clientes.store');
+        Route::get('clientes/{commercialClient}', [CommercialClientController::class, 'show'])->name('clientes.show');
+        Route::get('clientes/{commercialClient}/editar', [CommercialClientController::class, 'edit'])->name('clientes.edit');
+        Route::match(['put', 'patch'], 'clientes/{commercialClient}', [CommercialClientController::class, 'update'])->name('clientes.update');
+        Route::delete('clientes/{commercialClient}', [CommercialClientController::class, 'destroy'])->name('clientes.destroy');
+
+        Route::get('contactos', [CommercialContactController::class, 'index'])->name('contactos.index');
+        Route::post('clientes/{commercialClient}/contactos', [CommercialContactController::class, 'store'])->name('contactos.store');
+        Route::get('clientes/{commercialClient}/contactos/{commercialContact}/editar', [CommercialContactController::class, 'edit'])->name('contactos.edit');
+        Route::match(['put', 'patch'], 'clientes/{commercialClient}/contactos/{commercialContact}', [CommercialContactController::class, 'update'])->name('contactos.update');
+        Route::delete('clientes/{commercialClient}/contactos/{commercialContact}', [CommercialContactController::class, 'destroy'])->name('contactos.destroy');
+
+        Route::get('cotizaciones', [CommercialController::class, 'cotizaciones'])->name('cotizaciones');
+        Route::get('remisiones', [CommercialController::class, 'remisiones'])->name('remisiones');
+        Route::get('cuentas-por-cobrar', [CommercialController::class, 'cuentasCobrar'])->name('cuentas-cobrar');
+        Route::get('pagos-operativos', [CommercialController::class, 'pagosOperativos'])->name('pagos-operativos');
+    });
+
+    Route::prefix('operacion')->name('operacion.')->group(function () {
+        Route::get('actividades', [OperationsController::class, 'actividades'])->name('actividades');
+        Route::get('calendario', [OperationsController::class, 'calendario'])->name('calendario');
+        Route::get('tareas', [OperationsController::class, 'tareas'])->name('tareas');
+        Route::get('proyectos', [OperationsController::class, 'proyectos'])->name('proyectos');
+    });
 
     // 2) Catálogos
     Route::prefix('catalogos')->group(function () {
@@ -111,6 +144,12 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
     Route::post('/configuracion/csd', [ConfiguracionController::class, 'uploadCsd'])->name('configuracion.csd');
     Route::delete('/configuracion/logo', [ConfiguracionController::class, 'destroyLogo'])->name('configuracion.logo.destroy');
     Route::delete('/configuracion/documentos/{id}', [ConfiguracionController::class, 'destroyDocumento'])->name('configuracion.documentos.destroy');
+
+    Route::prefix('administracion')->name('administracion.')->group(function () {
+        Route::get('usuarios', [AdministrationController::class, 'usuarios'])->name('usuarios');
+        Route::get('roles-y-permisos', [AdministrationController::class, 'roles'])->name('roles');
+        Route::get('configuracion-general', [AdministrationController::class, 'general'])->name('general');
+    });
 
     // APIs (usan sesión, no tokens)
     Route::prefix('api')->group(function () {
