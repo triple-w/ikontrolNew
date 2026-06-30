@@ -280,7 +280,8 @@
                     fiscalClients: [],
                     globalDiscount: config.globalDiscount || '0',
                     productSearch: { query: '', open: false, results: [] },
-                    taxDrawer: { open: false, index: -1, error: '' },
+                    activeTaxRowIndex: -1,
+                    taxDrawer: { open: false, error: '' },
                     taxesDraft: [],
                     taxFeedback: '',
                     items: (config.initialItems || []).map((item, index) => ({
@@ -447,6 +448,15 @@
                         }
                         return [];
                     },
+                    cloneTaxes(taxes) {
+                        return (Array.isArray(taxes) ? taxes : [])
+                            .map((tax) => this.normalizeTax({
+                                tax_name: tax.tax_name,
+                                tax_type: tax.tax_type,
+                                tax_mode: tax.tax_mode,
+                                rate: tax.rate,
+                            }));
+                    },
                     normalizeTax(tax) {
                         const mode = ['rate', 'zero', 'exempt'].includes(tax.tax_mode) ? tax.tax_mode : 'rate';
                         return {
@@ -457,8 +467,9 @@
                         };
                     },
                     openTaxes(index) {
-                        this.taxDrawer = { open: true, index, error: '' };
-                        this.taxesDraft = (this.items[index]?.taxes || []).map((tax) => this.normalizeTax(tax));
+                        this.activeTaxRowIndex = index;
+                        this.taxDrawer = { open: true, error: '' };
+                        this.taxesDraft = this.cloneTaxes(this.items[index]?.taxes || []);
                     },
                     addTax() {
                         this.taxesDraft.push(this.normalizeTax({
@@ -472,8 +483,8 @@
                         this.taxesDraft.splice(index, 1);
                     },
                     applyTaxes() {
-                        if (this.taxDrawer.index < 0 || !this.items[this.taxDrawer.index]) return;
-                        const normalized = this.taxesDraft.map((tax) => this.normalizeTax(tax));
+                        if (this.activeTaxRowIndex < 0 || !this.items[this.activeTaxRowIndex]) return;
+                        const normalized = this.cloneTaxes(this.taxesDraft);
                         const invalid = normalized.find((tax) => {
                             if (tax.tax_name.trim() === '') return true;
                             if (!['traslado', 'retencion'].includes(tax.tax_type)) return true;
@@ -487,19 +498,20 @@
                             return;
                         }
 
-                        this.items[this.taxDrawer.index].taxes = normalized
-                            .map((tax) => this.normalizeTax(tax))
+                        this.items[this.activeTaxRowIndex].taxes = normalized
+                            .map((tax) => ({ ...tax }))
                             .filter((tax) => tax.tax_name.trim() !== '');
                         this.taxFeedback = 'Impuestos aplicados a la partida.';
                         window.setTimeout(() => { this.taxFeedback = ''; }, 2500);
                         this.cancelTaxes();
                     },
                     cancelTaxes() {
-                        this.taxDrawer = { open: false, index: -1, error: '' };
+                        this.taxDrawer = { open: false, error: '' };
+                        this.activeTaxRowIndex = -1;
                         this.taxesDraft = [];
                     },
                     activeTaxItem() {
-                        return this.items[this.taxDrawer.index] || null;
+                        return this.items[this.activeTaxRowIndex] || null;
                     },
                     get totals() {
                         const subtotal = this.items.reduce((carry, item) => carry + this.lineSubtotal(item), 0);

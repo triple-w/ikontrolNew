@@ -121,8 +121,9 @@
 
                 @if($quote->status === \App\Models\CommercialQuote::STATUS_ACCEPTED)
                     <x-ikontrol.module-section title="Remision futura">
-                        <div class="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500">
-                            La creacion de remision estara disponible proximamente.
+                        <div class="space-y-3">
+                            <p class="text-sm text-gray-500">Crea una remision parcial o total a partir de esta cotizacion aceptada.</p>
+                            <x-ikontrol.primary-link href="{{ route('comercial.cotizaciones.remisiones.create', $quote) }}">Crear remision</x-ikontrol.primary-link>
                         </div>
                     </x-ikontrol.module-section>
                 @endif

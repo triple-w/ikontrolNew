@@ -1,0 +1,141 @@
+@php
+    use App\Support\Decimal;
+
+    $remission = $document['remission'];
+    $template = $document['template'];
+    $totals = $document['totals'];
+    $accent = [
+        'teal' => '#0e948e',
+        'violet' => '#7c3aed',
+        'slate' => '#334155',
+        'emerald' => '#059669',
+    ][$template['accent_style'] ?? 'teal'] ?? '#0e948e';
+@endphp
+
+<style>
+    .commercial-invoice { --accent: {{ $accent }}; color: #111827; font-family: Arial, sans-serif; }
+    .commercial-invoice .doc-shell { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
+    .commercial-invoice .doc-header { border-top: 6px solid var(--accent); padding: 28px; display: grid; grid-template-columns: 1fr auto; gap: 24px; }
+    .commercial-invoice .doc-title { font-size: 26px; font-weight: 700; margin: 0; }
+    .commercial-invoice .muted { color: #6b7280; }
+    .commercial-invoice .plain { white-space: pre-line; }
+    .commercial-invoice .logo { max-width: 150px; max-height: 90px; object-fit: contain; }
+    .commercial-invoice .section { padding: 0 28px 24px; }
+    .commercial-invoice .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .commercial-invoice .box { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; }
+    .commercial-invoice .label { color: #6b7280; font-size: 12px; text-transform: uppercase; }
+    .commercial-invoice table { width: 100%; border-collapse: collapse; }
+    .commercial-invoice th { color: #6b7280; font-size: 11px; text-transform: uppercase; text-align: left; border-bottom: 1px solid #e5e7eb; padding: 10px 8px; }
+    .commercial-invoice td { border-bottom: 1px solid #f3f4f6; padding: 10px 8px; vertical-align: top; font-size: 13px; }
+    .commercial-invoice .right { text-align: right; }
+    .commercial-invoice .totals { max-width: 360px; margin-left: auto; }
+    .commercial-invoice .total-row { border-top: 2px solid #111827; font-size: 18px; font-weight: 700; }
+</style>
+
+<div class="commercial-invoice">
+    <div class="doc-shell">
+        <div class="doc-header">
+            <div>
+                <p class="muted" style="margin:0 0 6px;">Documento comercial no fiscal</p>
+                <h1 class="doc-title">{{ $document['resolved']['header_title'] ?: 'Remision comercial' }}</h1>
+                <p class="plain muted" style="margin:12px 0 0;">{{ $document['resolved']['header_text'] }}</p>
+            </div>
+            <div class="right">
+                @if(($template['show_logo'] ?? true) && !empty($document['logoDataUri']))
+                    <img src="{{ $document['logoDataUri'] }}" alt="Logo" class="logo">
+                @endif
+                <div style="margin-top:12px;">
+                    <div class="label">Folio</div>
+                    <div style="font-size:20px;font-weight:700;">{{ $remission->folio }}</div>
+                </div>
+                <div class="muted" style="margin-top:8px;font-size:13px;">{{ optional($remission->issue_date)->format('Y-m-d') }}</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="grid">
+                <div class="box">
+                    <div class="label">Empresa</div>
+                    <div style="font-weight:700;">{{ $document['company']['nombre'] ?: 'Empresa' }}</div>
+                    @if($document['company']['rfc'])<div class="muted">RFC: {{ $document['company']['rfc'] }}</div>@endif
+                    @if($document['company']['email'])<div class="muted">{{ $document['company']['email'] }}</div>@endif
+                </div>
+                <div class="box">
+                    <div class="label">Cliente</div>
+                    <div style="font-weight:700;">{{ $document['client']?->name ?? '-' }}</div>
+                    @if($document['client']?->business_name)<div class="muted">{{ $document['client']->business_name }}</div>@endif
+                    @if($document['contact'])<div class="muted" style="margin-top:8px;">Contacto: {{ $document['contact']->name }}</div>@endif
+                    @if($remission->quote)<div class="muted" style="margin-top:8px;">Cotizacion origen: {{ $remission->quote->folio }}</div>@endif
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Concepto</th>
+                        @if($template['show_item_sku'] ?? true)<th>SKU</th>@endif
+                        <th class="right">Cant.</th>
+                        <th>Unidad</th>
+                        <th class="right">Precio</th>
+                        <th class="right">Desc.</th>
+                        @if($template['show_item_tax'] ?? true)<th class="right">Impuesto</th>@endif
+                        <th class="right">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach($document['items'] as $item)
+                        <tr>
+                            <td>
+                                <strong>{{ $item['name'] }}</strong>
+                                @if($item['description'])<div class="plain muted">{{ $item['description'] }}</div>@endif
+                            </td>
+                            @if($template['show_item_sku'] ?? true)<td>{{ $item['sku'] ?: '-' }}</td>@endif
+                            <td class="right">{{ Decimal::format($item['quantity'], 6) }}</td>
+                            <td>{{ $item['unit'] ?: '-' }}</td>
+                            <td class="right">${{ Decimal::format($item['unit_price']) }}</td>
+                            <td class="right">${{ Decimal::format($item['discount']) }}</td>
+                            @if($template['show_item_tax'] ?? true)
+                                <td class="right">
+                                    @forelse(($item['taxes'] ?? []) as $tax)
+                                        <div>{{ $tax['tax_name'] }} {{ ($tax['tax_mode'] ?? 'rate') === 'rate' ? Decimal::format(Decimal::mul($tax['rate'] ?? '0', '100'), 4).'%' : (($tax['tax_mode'] ?? '') === 'zero' ? 'tasa cero' : 'exento') }}<br><span class="muted">${{ Decimal::format($tax['amount'] ?? '0') }}</span></div>
+                                    @empty
+                                        -
+                                    @endforelse
+                                </td>
+                            @endif
+                            <td class="right">${{ Decimal::format($item['line_total']) }}</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <div class="totals">
+                <table>
+                    <tr><td>Subtotal</td><td class="right">${{ Decimal::format($totals['subtotal'] ?? '0') }}</td></tr>
+                    <tr><td>Descuentos</td><td class="right">${{ Decimal::format($totals['discount_total'] ?? '0') }}</td></tr>
+                    <tr><td>Traslados</td><td class="right">${{ Decimal::format($totals['tax_transfers_total'] ?? '0') }}</td></tr>
+                    <tr><td>Retenciones</td><td class="right">-${{ Decimal::format($totals['tax_retentions_total'] ?? '0') }}</td></tr>
+                    <tr class="total-row"><td>Total {{ $remission->currency ?: 'MXN' }}</td><td class="right">${{ Decimal::format($totals['total'] ?? '0') }}</td></tr>
+                </table>
+            </div>
+        </div>
+
+        @if(($template['show_notes'] ?? true) && $remission->notes_visible)
+            <div class="section"><div class="box"><div class="label">Notas</div><div class="plain">{{ $remission->notes_visible }}</div></div></div>
+        @endif
+
+        @if($remission->conditions || $document['resolved']['terms_text'])
+            <div class="section"><div class="box"><div class="label">Condiciones</div><div class="plain">{{ trim(($remission->conditions ?: '') . "\n" . ($document['resolved']['terms_text'] ?: '')) }}</div></div></div>
+        @endif
+
+        @if($document['resolved']['footer_text'])
+            <div class="section">
+                <div class="plain muted" style="border-top:1px solid #e5e7eb;padding-top:16px;">{{ $document['resolved']['footer_text'] }}</div>
+            </div>
+        @endif
+    </div>
+</div>

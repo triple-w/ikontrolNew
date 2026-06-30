@@ -7,28 +7,23 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class CommercialQuote extends Model
+class CommercialRemission extends Model
 {
     public const STATUS_DRAFT = 'draft';
-    public const STATUS_SENT = 'sent';
-    public const STATUS_ACCEPTED = 'accepted';
-    public const STATUS_REJECTED = 'rejected';
-    public const STATUS_EXPIRED = 'expired';
+    public const STATUS_ISSUED = 'issued';
     public const STATUS_CANCELLED = 'cancelled';
-    public const STATUS_CONVERTED_TO_REMISSION = 'converted_to_remission';
+    public const STATUS_INVOICED = 'invoiced';
 
     public const STATUSES = [
         self::STATUS_DRAFT,
-        self::STATUS_SENT,
-        self::STATUS_ACCEPTED,
-        self::STATUS_REJECTED,
-        self::STATUS_EXPIRED,
+        self::STATUS_ISSUED,
         self::STATUS_CANCELLED,
-        self::STATUS_CONVERTED_TO_REMISSION,
+        self::STATUS_INVOICED,
     ];
 
     protected $fillable = [
         'users_id',
+        'commercial_quote_id',
         'commercial_client_id',
         'commercial_contact_id',
         'fiscal_client_id',
@@ -38,20 +33,21 @@ class CommercialQuote extends Model
         'folio_prefix',
         'folio_number',
         'folio',
-        'issued_at',
-        'expires_at',
+        'issue_date',
         'currency',
         'exchange_rate',
         'status',
-        'commercial_terms',
-        'internal_notes',
-        'customer_notes',
         'global_discount_amount',
         'subtotal',
         'line_discount_total',
         'discount_total',
+        'transfers_total',
+        'withholdings_total',
         'tax_total',
         'total',
+        'notes_visible',
+        'notes_internal',
+        'conditions',
         'template_name_snapshot',
         'logo_path_snapshot',
         'header_title_snapshot',
@@ -63,6 +59,7 @@ class CommercialQuote extends Model
 
     protected $casts = [
         'users_id' => 'integer',
+        'commercial_quote_id' => 'integer',
         'commercial_client_id' => 'integer',
         'commercial_contact_id' => 'integer',
         'fiscal_client_id' => 'integer',
@@ -70,31 +67,22 @@ class CommercialQuote extends Model
         'created_by_id' => 'integer',
         'assigned_user_id' => 'integer',
         'folio_number' => 'integer',
-        'issued_at' => 'date',
-        'expires_at' => 'date',
+        'issue_date' => 'date',
         'exchange_rate' => 'decimal:6',
         'global_discount_amount' => 'decimal:6',
         'subtotal' => 'decimal:6',
         'line_discount_total' => 'decimal:6',
         'discount_total' => 'decimal:6',
+        'transfers_total' => 'decimal:6',
+        'withholdings_total' => 'decimal:6',
         'tax_total' => 'decimal:6',
         'total' => 'decimal:6',
         'template_options_snapshot' => 'array',
     ];
 
-    public function owner(): BelongsTo
+    public function quote(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'users_id');
-    }
-
-    public function creator(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'created_by_id');
-    }
-
-    public function assignedUser(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'assigned_user_id');
+        return $this->belongsTo(CommercialQuote::class, 'commercial_quote_id');
     }
 
     public function commercialClient(): BelongsTo
@@ -117,39 +105,34 @@ class CommercialQuote extends Model
         return $this->belongsTo(CommercialDocumentTemplate::class, 'commercial_document_template_id');
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    public function assignedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
+    }
+
     public function items(): HasMany
     {
-        return $this->hasMany(CommercialQuoteItem::class)->orderBy('sort_order')->orderBy('id');
+        return $this->hasMany(CommercialRemissionItem::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function taxes(): HasMany
     {
-        return $this->hasMany(CommercialQuoteTax::class)->orderBy('sort_order')->orderBy('id');
+        return $this->hasMany(CommercialRemissionTax::class)->orderBy('sort_order')->orderBy('id');
     }
 
     public function statusHistory(): HasMany
     {
-        return $this->hasMany(CommercialQuoteStatusHistory::class)->orderByDesc('changed_at')->orderByDesc('id');
-    }
-
-    public function remissions(): HasMany
-    {
-        return $this->hasMany(CommercialRemission::class, 'commercial_quote_id')->orderByDesc('issue_date')->orderByDesc('id');
+        return $this->hasMany(CommercialRemissionStatusHistory::class)->orderByDesc('changed_at')->orderByDesc('id');
     }
 
     public function canBeEdited(): bool
     {
-        return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_SENT], true);
-    }
-
-    public function canBeDeleted(): bool
-    {
         return $this->status === self::STATUS_DRAFT;
-    }
-
-    public function scopeForUser(Builder $query, int $userId): Builder
-    {
-        return $query->where('users_id', $userId);
     }
 
     public function scopeVisibleTo(Builder $query, User $user): Builder

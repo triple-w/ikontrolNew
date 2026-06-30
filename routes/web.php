@@ -17,6 +17,7 @@ use App\Http\Controllers\Commercial\CommercialClientController;
 use App\Http\Controllers\Commercial\CommercialContactController;
 use App\Http\Controllers\Commercial\CommercialDocumentTemplateController;
 use App\Http\Controllers\Commercial\CommercialQuoteController;
+use App\Http\Controllers\Commercial\CommercialRemissionController;
 
 use App\Http\Controllers\Api\SeriesController;
 use App\Http\Controllers\Api\ProductosApiController;
@@ -68,7 +69,19 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
         Route::get('cotizaciones/{commercialQuote}/previsualizar', [CommercialQuoteController::class, 'preview'])->whereNumber('commercialQuote')->name('cotizaciones.preview');
         Route::get('cotizaciones/{commercialQuote}/pdf', [CommercialQuoteController::class, 'pdf'])->whereNumber('commercialQuote')->name('cotizaciones.pdf');
         Route::get('cotizaciones/{commercialQuote}/imprimir', [CommercialQuoteController::class, 'print'])->whereNumber('commercialQuote')->name('cotizaciones.print');
-        Route::get('remisiones', [CommercialController::class, 'remisiones'])->name('remisiones');
+
+        Route::get('cotizaciones/{commercialQuote}/crear-remision', [CommercialRemissionController::class, 'createFromQuote'])->whereNumber('commercialQuote')->name('cotizaciones.remisiones.create');
+        Route::post('cotizaciones/{commercialQuote}/crear-remision', [CommercialRemissionController::class, 'store'])->whereNumber('commercialQuote')->name('cotizaciones.remisiones.store');
+        Route::get('remisiones', [CommercialRemissionController::class, 'index'])->name('remisiones.index');
+        Route::get('remisiones/crear', [CommercialRemissionController::class, 'create'])->name('remisiones.create');
+        Route::post('remisiones', [CommercialRemissionController::class, 'store'])->name('remisiones.store');
+        Route::get('remisiones/{commercialRemission}', [CommercialRemissionController::class, 'show'])->whereNumber('commercialRemission')->name('remisiones.show');
+        Route::get('remisiones/{commercialRemission}/editar', [CommercialRemissionController::class, 'edit'])->whereNumber('commercialRemission')->name('remisiones.edit');
+        Route::match(['put', 'patch'], 'remisiones/{commercialRemission}', [CommercialRemissionController::class, 'update'])->whereNumber('commercialRemission')->name('remisiones.update');
+        Route::post('remisiones/{commercialRemission}/emitir', [CommercialRemissionController::class, 'issue'])->whereNumber('commercialRemission')->name('remisiones.issue');
+        Route::post('remisiones/{commercialRemission}/cancelar', [CommercialRemissionController::class, 'cancel'])->whereNumber('commercialRemission')->name('remisiones.cancel');
+        Route::get('remisiones/{commercialRemission}/previsualizar', [CommercialRemissionController::class, 'preview'])->whereNumber('commercialRemission')->name('remisiones.preview');
+        Route::get('remisiones/{commercialRemission}/pdf', [CommercialRemissionController::class, 'pdf'])->whereNumber('commercialRemission')->name('remisiones.pdf');
         Route::get('cuentas-por-cobrar', [CommercialController::class, 'cuentasCobrar'])->name('cuentas-cobrar');
         Route::get('pagos-operativos', [CommercialController::class, 'pagosOperativos'])->name('pagos-operativos');
     });
