@@ -200,6 +200,28 @@ class CommercialQuotesTest extends TestCase
             ->assertSee('Documento comercial no fiscal');
     }
 
+    public function test_quote_tax_drawer_applies_only_draft_taxes_to_item_payload(): void
+    {
+        $form = file_get_contents(resource_path('views/comercial/cotizaciones/_form.blade.php'));
+        $drawer = file_get_contents(resource_path('views/comercial/cotizaciones/partials/_tax-drawer.blade.php'));
+
+        $this->assertStringContainsString('activeTaxRowIndex', $form);
+        $this->assertStringContainsString('taxesDraft = this.cloneTaxes(this.items[index]?.taxes || [])', $form);
+        $this->assertStringContainsString('this.items[this.activeTaxRowIndex].taxes = normalized', $form);
+        $this->assertStringContainsString('.map((tax) => ({ ...tax }))', $form);
+        $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][tax_name]', $form);
+        $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][tax_type]', $form);
+        $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][tax_mode]', $form);
+        $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][rate]', $form);
+        $this->assertStringNotContainsString('items[${index}][taxes][${taxIndex}][base]', $form);
+        $this->assertStringNotContainsString('items[${index}][taxes][${taxIndex}][amount]', $form);
+
+        $this->assertStringContainsString('Cancelar', $drawer);
+        $this->assertStringContainsString('Aplicar impuestos', $drawer);
+        $this->assertStringContainsString('@click="cancelTaxes()"', $drawer);
+        $this->assertStringContainsString('@click="applyTaxes()"', $drawer);
+    }
+
     public function test_user_cannot_view_another_users_quote(): void
     {
         $owner = $this->createUser('owner@example.test', 'OWNER');
