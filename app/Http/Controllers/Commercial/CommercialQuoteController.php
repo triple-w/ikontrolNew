@@ -18,6 +18,7 @@ use App\Services\CommercialDocuments\CommercialQuoteDocumentBuilder;
 use App\Services\CommercialDocuments\CommercialTemplateSnapshotter;
 use App\Services\CommercialQuoteCalculator;
 use App\Services\CommercialQuoteFolioService;
+use App\Support\Decimal;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -144,7 +145,7 @@ class CommercialQuoteController extends Controller
         $this->authorize('update', $commercialQuote);
         $this->ensureEditable($commercialQuote);
 
-        $commercialQuote->load(['items', 'commercialClient.contacts', 'commercialClient.fiscalClients']);
+        $commercialQuote->load(['items.taxes', 'commercialClient.contacts', 'commercialClient.fiscalClients']);
 
         return view('comercial.cotizaciones.edit', [
             'quote' => $commercialQuote,
@@ -178,6 +179,7 @@ class CommercialQuoteController extends Controller
             }
 
             $commercialQuote->update($this->quotePayload($data, $client, $calculated, $status));
+            $commercialQuote->taxes()->delete();
             $commercialQuote->items()->delete();
             $this->storeItems($commercialQuote, $calculated['items']);
 
@@ -299,9 +301,7 @@ class CommercialQuoteController extends Controller
                 'snapshot_description' => (string) ($product->observaciones ?: $product->descripcion ?: ''),
                 'snapshot_unit' => (string) ($product->unidad ?: $product->unidadSat?->clave ?: ''),
                 'unit_price' => (string) ($product->precio ?? '0.000000'),
-                'tax_name' => '',
-                'tax_type' => CommercialQuoteTax::TYPE_TRASLADO,
-                'tax_rate' => '0.000000',
+                'taxes' => [],
             ])->values(),
         ]);
     }
@@ -405,9 +405,9 @@ class CommercialQuoteController extends Controller
                 'snapshot_description' => $item['snapshot_description'] ?? null,
                 'snapshot_unit' => $item['snapshot_unit'] ?? null,
                 'snapshot_unit_price' => $item['unit_price'],
-                'snapshot_tax_name' => $item['tax_name'] ?: null,
-                'snapshot_tax_type' => $item['tax_type'] ?: null,
-                'snapshot_tax_rate' => $item['tax_rate'],
+                'snapshot_tax_name' => null,
+                'snapshot_tax_type' => null,
+                'snapshot_tax_rate' => '0.000000',
                 'quantity' => $item['quantity'],
                 'unit_price' => $item['unit_price'],
                 'line_discount_amount' => $item['line_discount_amount'],
@@ -421,15 +421,16 @@ class CommercialQuoteController extends Controller
                 'notes' => $item['notes'] ?? null,
             ]);
 
-            if ($item['tax_name'] !== '' && $item['tax_rate'] !== '0.000000') {
+            foreach ($item['taxes'] ?? [] as $tax) {
                 $quote->taxes()->create([
                     'commercial_quote_item_id' => $created->id,
-                    'tax_name' => $item['tax_name'],
-                    'tax_type' => $item['tax_type'],
-                    'rate' => $item['tax_rate'],
-                    'base' => $item['taxable_base'],
-                    'amount' => $item['tax_amount'],
-                    'sort_order' => $index + 1,
+                    'tax_name' => $tax['tax_name'],
+                    'tax_type' => $tax['tax_type'],
+                    'tax_mode' => $tax['tax_mode'],
+                    'rate' => $tax['rate'],
+                    'base' => $tax['base'],
+                    'amount' => $tax['amount'],
+                    'sort_order' => $tax['sort_order'],
                 ]);
             }
         }
@@ -447,12 +448,44 @@ class CommercialQuoteController extends Controller
                 'quantity' => (string) ($item['quantity'] ?? '0'),
                 'unit_price' => (string) ($item['unit_price'] ?? '0'),
                 'line_discount_amount' => (string) ($item['line_discount_amount'] ?? '0'),
+                'taxes' => $this->taxPayloads($item),
                 'tax_name' => trim((string) ($item['tax_name'] ?? '')),
                 'tax_type' => (string) ($item['tax_type'] ?? CommercialQuoteTax::TYPE_TRASLADO),
                 'tax_rate' => (string) ($item['tax_rate'] ?? '0'),
                 'notes' => $item['notes'] ?? null,
             ];
         })->all();
+    }
+
+    private function taxPayloads(array $item): array
+    {
+        $taxes = collect($item['taxes'] ?? [])
+            ->filter(fn ($tax) => is_array($tax) && trim((string) ($tax['tax_name'] ?? '')) !== '')
+            ->map(fn (array $tax) => [
+                'tax_name' => trim((string) ($tax['tax_name'] ?? '')),
+                'tax_type' => (string) ($tax['tax_type'] ?? CommercialQuoteTax::TYPE_TRASLADO),
+                'tax_mode' => (string) ($tax['tax_mode'] ?? CommercialQuoteTax::MODE_RATE),
+                'rate' => (string) ($tax['rate'] ?? '0'),
+            ])
+            ->values()
+            ->all();
+
+        if (!empty($taxes)) {
+            return $taxes;
+        }
+
+        $legacyName = trim((string) ($item['tax_name'] ?? ''));
+        $legacyRate = (string) ($item['tax_rate'] ?? '0');
+        if ($legacyName === '' && Decimal::cmp($legacyRate, '0') <= 0) {
+            return [];
+        }
+
+        return [[
+            'tax_name' => $legacyName !== '' ? $legacyName : 'IVA',
+            'tax_type' => (string) ($item['tax_type'] ?? CommercialQuoteTax::TYPE_TRASLADO),
+            'tax_mode' => Decimal::cmp($legacyRate, '0') > 0 ? CommercialQuoteTax::MODE_RATE : CommercialQuoteTax::MODE_ZERO,
+            'rate' => $legacyRate,
+        ]];
     }
 
     private function validatedClient(int $clientId, User $user, ?int $ownerId = null): CommercialClient
@@ -547,11 +580,33 @@ class CommercialQuoteController extends Controller
             'quantity' => $item->quantity,
             'unit_price' => $item->unit_price,
             'line_discount_amount' => $item->line_discount_amount,
-            'tax_name' => $item->snapshot_tax_name,
-            'tax_type' => $item->snapshot_tax_type ?: CommercialQuoteTax::TYPE_TRASLADO,
-            'tax_rate' => $item->snapshot_tax_rate,
+            'tax_name' => '',
+            'tax_type' => CommercialQuoteTax::TYPE_TRASLADO,
+            'tax_rate' => '0',
+            'taxes' => $this->taxPayloadsFromModel($item),
             'notes' => $item->notes,
         ];
+    }
+
+    private function taxPayloadsFromModel($item): array
+    {
+        $taxes = $item->taxes->sortBy('sort_order')->map(fn (CommercialQuoteTax $tax) => [
+            'tax_name' => $tax->tax_name,
+            'tax_type' => $tax->tax_type,
+            'tax_mode' => $tax->tax_mode ?: CommercialQuoteTax::MODE_RATE,
+            'rate' => $tax->rate,
+        ])->values()->all();
+
+        if (!empty($taxes) || !$item->snapshot_tax_name) {
+            return $taxes;
+        }
+
+        return [[
+            'tax_name' => $item->snapshot_tax_name,
+            'tax_type' => $item->snapshot_tax_type ?: CommercialQuoteTax::TYPE_TRASLADO,
+            'tax_mode' => Decimal::cmp((string) $item->snapshot_tax_rate, '0') > 0 ? CommercialQuoteTax::MODE_RATE : CommercialQuoteTax::MODE_ZERO,
+            'rate' => (string) $item->snapshot_tax_rate,
+        ]];
     }
 
     private function userOptions()

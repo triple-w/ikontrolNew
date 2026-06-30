@@ -137,10 +137,24 @@
                             <td class="right">${{ Decimal::format($item['discount']) }}</td>
                             @if($template['show_item_tax'] ?? true)
                                 <td class="right">
-                                    {{ $item['tax_name'] ?: '-' }}
-                                    @if(!empty($item['tax_rate']) && Decimal::cmp($item['tax_rate'], '0') > 0)
-                                        <br><span class="muted">${{ Decimal::format($item['tax_amount']) }}</span>
-                                    @endif
+                                    @forelse(($item['taxes'] ?? []) as $tax)
+                                        <div>
+                                            {{ $tax['tax_name'] }}
+                                            @if(($tax['tax_mode'] ?? 'rate') === 'exempt')
+                                                <span class="muted">exento</span>
+                                            @elseif(($tax['tax_mode'] ?? 'rate') === 'zero')
+                                                <span class="muted">tasa cero</span>
+                                            @else
+                                                <span class="muted">{{ Decimal::format(Decimal::mul($tax['rate'] ?? '0', '100'), 4) }}%</span>
+                                            @endif
+                                            @if(($tax['tax_type'] ?? 'traslado') === 'retencion')
+                                                <span class="badge">Retencion</span>
+                                            @endif
+                                            <br><span class="muted">${{ Decimal::format($tax['amount'] ?? '0') }}</span>
+                                        </div>
+                                    @empty
+                                        -
+                                    @endforelse
                                 </td>
                             @endif
                             <td class="right">${{ Decimal::format($item['line_total']) }}</td>
@@ -156,7 +170,9 @@
                     <tr><td>Subtotal</td><td class="right">${{ Decimal::format($totals['subtotal'] ?? '0') }}</td></tr>
                     <tr><td>Descuentos por partida</td><td class="right">${{ Decimal::format($totals['line_discount_total'] ?? '0') }}</td></tr>
                     <tr><td>Descuento global</td><td class="right">${{ Decimal::format($totals['global_discount_amount'] ?? '0') }}</td></tr>
-                    <tr><td>Impuestos</td><td class="right">${{ Decimal::format($totals['tax_total'] ?? '0') }}</td></tr>
+                    <tr><td>Traslados</td><td class="right">${{ Decimal::format($totals['tax_transfers_total'] ?? '0') }}</td></tr>
+                    <tr><td>Retenciones</td><td class="right">-${{ Decimal::format($totals['tax_retentions_total'] ?? '0') }}</td></tr>
+                    <tr><td>Impuestos netos</td><td class="right">${{ Decimal::format($totals['tax_total'] ?? '0') }}</td></tr>
                     <tr class="total-row"><td>Total {{ $quote->currency ?: 'MXN' }}</td><td class="right">${{ Decimal::format($totals['total'] ?? '0') }}</td></tr>
                 </table>
             </div>

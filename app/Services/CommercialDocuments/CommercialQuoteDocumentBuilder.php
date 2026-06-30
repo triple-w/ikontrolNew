@@ -7,6 +7,7 @@ use App\Models\CommercialClient;
 use App\Models\CommercialContact;
 use App\Models\CommercialDocumentTemplate;
 use App\Models\CommercialQuote;
+use App\Models\CommercialQuoteTax;
 use App\Services\CommercialQuoteCalculator;
 use App\Support\Decimal;
 use Illuminate\Support\Facades\DB;
@@ -40,8 +41,7 @@ class CommercialQuoteDocumentBuilder
             'quantity' => $item->quantity,
             'unit_price' => $item->unit_price,
             'discount' => $item->line_discount_amount,
-            'tax_name' => $item->snapshot_tax_name,
-            'tax_rate' => $item->snapshot_tax_rate,
+            'taxes' => $this->taxesForItem($item),
             'tax_amount' => $item->tax_amount,
             'line_subtotal' => $item->line_subtotal,
             'line_total' => $item->line_total,
@@ -60,6 +60,7 @@ class CommercialQuoteDocumentBuilder
                 'line_discount_total' => (string) $quote->line_discount_total,
                 'global_discount_amount' => (string) $quote->global_discount_amount,
                 'discount_total' => (string) $quote->discount_total,
+                ...$this->taxTotals($items),
                 'tax_total' => (string) $quote->tax_total,
                 'total' => (string) $quote->total,
             ],
@@ -106,8 +107,7 @@ class CommercialQuoteDocumentBuilder
             'quantity' => $item['quantity'],
             'unit_price' => $item['unit_price'],
             'discount' => $item['line_discount_amount'],
-            'tax_name' => $item['tax_name'] ?? null,
-            'tax_rate' => $item['tax_rate'] ?? '0',
+            'taxes' => $item['taxes'] ?? [],
             'tax_amount' => $item['tax_amount'],
             'line_subtotal' => $item['line_subtotal'],
             'line_total' => $item['line_total'],
@@ -121,7 +121,7 @@ class CommercialQuoteDocumentBuilder
             contact: $contact,
             fiscalClient: $fiscalClient,
             items: $items,
-            totals: $calculated['totals'],
+            totals: array_merge($calculated['totals'], $this->taxTotals($items)),
             logoPath: $template?->logo_path,
             isTemporary: true
         );
@@ -330,10 +330,89 @@ class CommercialQuoteDocumentBuilder
             'quantity' => (string) ($item['quantity'] ?? '0'),
             'unit_price' => (string) ($item['unit_price'] ?? '0'),
             'line_discount_amount' => (string) ($item['line_discount_amount'] ?? '0'),
+            'taxes' => $this->taxPayloads($item),
             'tax_name' => trim((string) ($item['tax_name'] ?? '')),
-            'tax_type' => (string) ($item['tax_type'] ?? 'traslado'),
+            'tax_type' => (string) ($item['tax_type'] ?? CommercialQuoteTax::TYPE_TRASLADO),
             'tax_rate' => (string) ($item['tax_rate'] ?? '0'),
             'notes' => $item['notes'] ?? null,
         ])->all();
+    }
+
+    private function taxPayloads(array $item): array
+    {
+        $taxes = collect($item['taxes'] ?? [])
+            ->filter(fn ($tax) => is_array($tax) && trim((string) ($tax['tax_name'] ?? '')) !== '')
+            ->map(fn (array $tax) => [
+                'tax_name' => trim((string) ($tax['tax_name'] ?? '')),
+                'tax_type' => (string) ($tax['tax_type'] ?? CommercialQuoteTax::TYPE_TRASLADO),
+                'tax_mode' => (string) ($tax['tax_mode'] ?? CommercialQuoteTax::MODE_RATE),
+                'rate' => (string) ($tax['rate'] ?? '0'),
+            ])
+            ->values()
+            ->all();
+
+        if (!empty($taxes)) {
+            return $taxes;
+        }
+
+        $legacyName = trim((string) ($item['tax_name'] ?? ''));
+        $legacyRate = (string) ($item['tax_rate'] ?? '0');
+        if ($legacyName === '' && Decimal::cmp($legacyRate, '0') <= 0) {
+            return [];
+        }
+
+        return [[
+            'tax_name' => $legacyName !== '' ? $legacyName : 'IVA',
+            'tax_type' => (string) ($item['tax_type'] ?? CommercialQuoteTax::TYPE_TRASLADO),
+            'tax_mode' => Decimal::cmp($legacyRate, '0') > 0 ? CommercialQuoteTax::MODE_RATE : CommercialQuoteTax::MODE_ZERO,
+            'rate' => $legacyRate,
+        ]];
+    }
+
+    private function taxesForItem($item): array
+    {
+        $taxes = $item->taxes->sortBy('sort_order')->map(fn (CommercialQuoteTax $tax) => [
+            'tax_name' => $tax->tax_name,
+            'tax_type' => $tax->tax_type,
+            'tax_mode' => $tax->tax_mode ?: CommercialQuoteTax::MODE_RATE,
+            'rate' => $tax->rate,
+            'base' => $tax->base,
+            'amount' => $tax->amount,
+        ])->values()->all();
+
+        if (!empty($taxes) || !$item->snapshot_tax_name) {
+            return $taxes;
+        }
+
+        return [[
+            'tax_name' => $item->snapshot_tax_name,
+            'tax_type' => $item->snapshot_tax_type ?: CommercialQuoteTax::TYPE_TRASLADO,
+            'tax_mode' => Decimal::cmp((string) $item->snapshot_tax_rate, '0') > 0 ? CommercialQuoteTax::MODE_RATE : CommercialQuoteTax::MODE_ZERO,
+            'rate' => (string) $item->snapshot_tax_rate,
+            'base' => (string) $item->taxable_base,
+            'amount' => (string) $item->tax_amount,
+        ]];
+    }
+
+    private function taxTotals(array $items): array
+    {
+        $transfers = Decimal::zero();
+        $retentions = Decimal::zero();
+
+        foreach ($items as $item) {
+            foreach (($item['taxes'] ?? []) as $tax) {
+                $amount = Decimal::normalize($tax['amount'] ?? '0');
+                if (($tax['tax_type'] ?? CommercialQuoteTax::TYPE_TRASLADO) === CommercialQuoteTax::TYPE_RETENCION) {
+                    $retentions = Decimal::add($retentions, ltrim($amount, '-'));
+                } else {
+                    $transfers = Decimal::add($transfers, $amount);
+                }
+            }
+        }
+
+        return [
+            'tax_transfers_total' => $transfers,
+            'tax_retentions_total' => $retentions,
+        ];
     }
 }

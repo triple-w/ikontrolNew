@@ -9,12 +9,27 @@ class CommercialQuoteTax extends Model
 {
     public const TYPE_TRASLADO = 'traslado';
     public const TYPE_RETENCION = 'retencion';
+    public const MODE_RATE = 'rate';
+    public const MODE_ZERO = 'zero';
+    public const MODE_EXEMPT = 'exempt';
+
+    public const TYPES = [
+        self::TYPE_TRASLADO,
+        self::TYPE_RETENCION,
+    ];
+
+    public const MODES = [
+        self::MODE_RATE,
+        self::MODE_ZERO,
+        self::MODE_EXEMPT,
+    ];
 
     protected $fillable = [
         'commercial_quote_id',
         'commercial_quote_item_id',
         'tax_name',
         'tax_type',
+        'tax_mode',
         'rate',
         'base',
         'amount',

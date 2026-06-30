@@ -10,9 +10,7 @@
             'quantity' => '1',
             'unit_price' => '0',
             'line_discount_amount' => '0',
-            'tax_name' => '',
-            'tax_type' => 'traslado',
-            'tax_rate' => '0',
+            'taxes' => [],
             'notes' => '',
         ]];
     }
@@ -151,7 +149,7 @@
                                 <th class="px-3 py-2">Unidad</th>
                                 <th class="px-3 py-2">Precio</th>
                                 <th class="px-3 py-2">Descuento</th>
-                                <th class="px-3 py-2">Impuesto</th>
+                                <th class="px-3 py-2">Impuestos</th>
                                 <th class="px-3 py-2 text-right">Importe</th>
                                 <th class="px-3 py-2 text-right">Acciones</th>
                             </tr>
@@ -171,13 +169,22 @@
                                     <td class="px-3 py-3"><input type="number" step="0.000001" min="0" :name="`items[${index}][unit_price]`" x-model="item.unit_price" required class="w-28 rounded-md border-gray-300 text-sm"></td>
                                     <td class="px-3 py-3"><input type="number" step="0.000001" min="0" :name="`items[${index}][line_discount_amount]`" x-model="item.line_discount_amount" class="w-28 rounded-md border-gray-300 text-sm"></td>
                                     <td class="px-3 py-3">
-                                        <div class="space-y-2">
-                                            <input :name="`items[${index}][tax_name]`" x-model="item.tax_name" class="w-28 rounded-md border-gray-300 text-sm" placeholder="IVA">
-                                            <input type="number" step="0.000001" min="0" :name="`items[${index}][tax_rate]`" x-model="item.tax_rate" class="w-28 rounded-md border-gray-300 text-sm" placeholder="0.160000">
-                                            <select :name="`items[${index}][tax_type]`" x-model="item.tax_type" class="w-28 rounded-md border-gray-300 text-xs">
-                                                <option value="traslado">Traslado</option>
-                                                <option value="retencion">Retencion</option>
-                                            </select>
+                                        <div class="space-y-2 min-w-40">
+                                            <template x-for="(tax, taxIndex) in item.taxes" :key="`${item.uid}-tax-${taxIndex}`">
+                                                <div>
+                                                    <input type="hidden" :name="`items[${index}][taxes][${taxIndex}][tax_name]`" :value="tax.tax_name">
+                                                    <input type="hidden" :name="`items[${index}][taxes][${taxIndex}][tax_type]`" :value="tax.tax_type">
+                                                    <input type="hidden" :name="`items[${index}][taxes][${taxIndex}][tax_mode]`" :value="tax.tax_mode">
+                                                    <input type="hidden" :name="`items[${index}][taxes][${taxIndex}][rate]`" :value="tax.rate">
+                                                    <input type="hidden" :name="`items[${index}][taxes][${taxIndex}][sort_order]`" :value="taxIndex + 1">
+                                                </div>
+                                            </template>
+                                            <button type="button" @click="openTaxes(index)" class="inline-flex items-center rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50">
+                                                Impuestos
+                                                <span class="ml-2 rounded-full bg-teal-50 px-2 py-0.5 text-[11px] text-teal-700" x-text="item.taxes.length"></span>
+                                            </button>
+                                            <div class="text-xs text-gray-500" x-text="taxSummary(item)"></div>
+                                            <div class="text-xs font-medium text-gray-700" x-text="`Neto imp.: $${money(itemTaxTotal(item))}`"></div>
                                         </div>
                                     </td>
                                     <td class="px-3 py-3 text-right font-medium" x-text="`$${money(lineTotal(item))}`"></td>
@@ -194,6 +201,7 @@
                     </table>
                 </div>
             </x-ikontrol.module-section>
+            @include('comercial.cotizaciones.partials._tax-drawer')
 
             <x-ikontrol.module-section title="Condiciones y notas">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -264,6 +272,8 @@
                     fiscalClients: [],
                     globalDiscount: config.globalDiscount || '0',
                     productSearch: { query: '', open: false, results: [] },
+                    taxDrawer: { open: false, index: -1 },
+                    taxesEdit: [],
                     items: (config.initialItems || []).map((item, index) => ({
                         uid: `${Date.now()}-${index}`,
                         product_id: item.product_id || '',
@@ -274,9 +284,21 @@
                         quantity: item.quantity || '1',
                         unit_price: item.unit_price || '0',
                         line_discount_amount: item.line_discount_amount || '0',
-                        tax_name: item.tax_name || '',
-                        tax_type: item.tax_type || 'traslado',
-                        tax_rate: item.tax_rate || '0',
+                        taxes: Array.isArray(item.taxes) && item.taxes.length
+                            ? item.taxes.map((tax) => ({
+                                tax_name: tax.tax_name || '',
+                                tax_type: tax.tax_type === 'retencion' ? 'retencion' : 'traslado',
+                                tax_mode: ['rate', 'zero', 'exempt'].includes(tax.tax_mode) ? tax.tax_mode : 'rate',
+                                rate: ['zero', 'exempt'].includes(tax.tax_mode) ? '0' : (tax.rate || '0'),
+                            })).filter((tax) => tax.tax_name)
+                            : ((item.tax_name || '').trim() || Number.parseFloat(item.tax_rate || '0') > 0
+                                ? [{
+                                    tax_name: item.tax_name || 'IVA',
+                                    tax_type: item.tax_type === 'retencion' ? 'retencion' : 'traslado',
+                                    tax_mode: Number.parseFloat(item.tax_rate || '0') > 0 ? 'rate' : 'zero',
+                                    rate: item.tax_rate || '0',
+                                }]
+                                : []),
                         notes: item.notes || '',
                     })),
                     init() {
@@ -321,9 +343,7 @@
                             quantity: '1',
                             unit_price: product.unit_price || '0',
                             line_discount_amount: '0',
-                            tax_name: product.tax_name || '',
-                            tax_type: product.tax_type || 'traslado',
-                            tax_rate: product.tax_rate || '0',
+                            taxes: this.normalizeTaxes(product),
                             notes: '',
                         });
                         this.productSearch.query = '';
@@ -341,9 +361,7 @@
                             quantity: '1',
                             unit_price: '0',
                             line_discount_amount: '0',
-                            tax_name: '',
-                            tax_type: 'traslado',
-                            tax_rate: '0',
+                            taxes: [],
                             notes: '',
                         });
                     },
@@ -358,24 +376,99 @@
                         this.items.splice(target, 0, item);
                     },
                     lineTotal(item) {
-                        const subtotal = this.toNumber(item.quantity) * this.toNumber(item.unit_price);
-                        const base = Math.max(subtotal - this.toNumber(item.line_discount_amount), 0);
-                        const tax = base * this.toNumber(item.tax_rate) * (item.tax_type === 'retencion' ? -1 : 1);
-                        return Math.max(base + tax, 0);
+                        return Math.max(this.lineTaxableBase(item) + this.itemTaxTotal(item), 0);
+                    },
+                    lineSubtotal(item) {
+                        return this.toNumber(item.quantity) * this.toNumber(item.unit_price);
+                    },
+                    lineBaseBeforeGlobal(item) {
+                        return Math.max(this.lineSubtotal(item) - this.toNumber(item.line_discount_amount), 0);
+                    },
+                    lineGlobalShare(item) {
+                        const baseTotal = this.items.reduce((carry, row) => carry + this.lineBaseBeforeGlobal(row), 0);
+                        if (baseTotal <= 0) return 0;
+                        return Math.min(this.toNumber(this.globalDiscount) * (this.lineBaseBeforeGlobal(item) / baseTotal), this.lineBaseBeforeGlobal(item));
+                    },
+                    lineTaxableBase(item) {
+                        return Math.max(this.lineBaseBeforeGlobal(item) - this.lineGlobalShare(item), 0);
+                    },
+                    taxAmountFor(item, tax) {
+                        if ((tax.tax_mode || 'rate') !== 'rate') return 0;
+                        const amount = this.lineTaxableBase(item) * this.toNumber(tax.rate);
+                        return tax.tax_type === 'retencion' ? -amount : amount;
+                    },
+                    itemTaxTotal(item) {
+                        return (item.taxes || []).reduce((carry, tax) => carry + this.taxAmountFor(item, tax), 0);
+                    },
+                    taxSummary(item) {
+                        if (!(item.taxes || []).length) return 'Sin impuestos';
+                        return item.taxes.map((tax) => this.taxLabel(tax)).join(' + ');
+                    },
+                    taxLabel(tax) {
+                        const name = tax.tax_name || 'Impuesto';
+                        if (tax.tax_mode === 'exempt') return `${name} exento`;
+                        if (tax.tax_mode === 'zero') return `${name} tasa cero`;
+                        const pct = this.toNumber(tax.rate) * 100;
+                        return `${name} ${pct.toLocaleString('es-MX', { maximumFractionDigits: 4 })}%`;
+                    },
+                    normalizeTaxes(item) {
+                        const taxes = Array.isArray(item.taxes) ? item.taxes : [];
+                        if (taxes.length) {
+                            return taxes.map((tax) => this.normalizeTax(tax)).filter((tax) => tax.tax_name);
+                        }
+                        if ((item.tax_name || '').trim() || this.toNumber(item.tax_rate) > 0) {
+                            return [this.normalizeTax({
+                                tax_name: item.tax_name || 'IVA',
+                                tax_type: item.tax_type || 'traslado',
+                                tax_mode: this.toNumber(item.tax_rate) > 0 ? 'rate' : 'zero',
+                                rate: item.tax_rate || '0',
+                            })];
+                        }
+                        return [];
+                    },
+                    normalizeTax(tax) {
+                        const mode = ['rate', 'zero', 'exempt'].includes(tax.tax_mode) ? tax.tax_mode : 'rate';
+                        return {
+                            tax_name: tax.tax_name || '',
+                            tax_type: tax.tax_type === 'retencion' ? 'retencion' : 'traslado',
+                            tax_mode: mode,
+                            rate: mode === 'rate' ? (tax.rate || '0') : '0',
+                        };
+                    },
+                    openTaxes(index) {
+                        this.taxDrawer = { open: true, index };
+                        this.taxesEdit = (this.items[index]?.taxes || []).map((tax) => this.normalizeTax(tax));
+                    },
+                    addTax() {
+                        this.taxesEdit.push(this.normalizeTax({
+                            tax_name: 'IVA',
+                            tax_type: 'traslado',
+                            tax_mode: 'rate',
+                            rate: '0.160000',
+                        }));
+                    },
+                    removeTax(index) {
+                        this.taxesEdit.splice(index, 1);
+                    },
+                    saveTaxes() {
+                        if (this.taxDrawer.index < 0 || !this.items[this.taxDrawer.index]) return;
+                        this.items[this.taxDrawer.index].taxes = this.taxesEdit
+                            .map((tax) => this.normalizeTax(tax))
+                            .filter((tax) => tax.tax_name.trim() !== '');
+                        this.closeTaxes();
+                    },
+                    closeTaxes() {
+                        this.taxDrawer = { open: false, index: -1 };
+                        this.taxesEdit = [];
+                    },
+                    activeTaxItem() {
+                        return this.items[this.taxDrawer.index] || null;
                     },
                     get totals() {
-                        const subtotal = this.items.reduce((carry, item) => carry + this.toNumber(item.quantity) * this.toNumber(item.unit_price), 0);
+                        const subtotal = this.items.reduce((carry, item) => carry + this.lineSubtotal(item), 0);
                         const lineDiscount = this.items.reduce((carry, item) => carry + this.toNumber(item.line_discount_amount), 0);
                         const globalDiscount = this.toNumber(this.globalDiscount);
-                        const baseTotal = Math.max(subtotal - lineDiscount, 0);
-                        const tax = this.items.reduce((carry, item) => {
-                            const lineSubtotal = this.toNumber(item.quantity) * this.toNumber(item.unit_price);
-                            const lineBase = Math.max(lineSubtotal - this.toNumber(item.line_discount_amount), 0);
-                            const share = baseTotal > 0 ? globalDiscount * (lineBase / baseTotal) : 0;
-                            const taxable = Math.max(lineBase - share, 0);
-                            const sign = item.tax_type === 'retencion' ? -1 : 1;
-                            return carry + taxable * this.toNumber(item.tax_rate) * sign;
-                        }, 0);
+                        const tax = this.items.reduce((carry, item) => carry + this.itemTaxTotal(item), 0);
                         return {
                             subtotal,
                             lineDiscount,

@@ -45,8 +45,16 @@ class StoreCommercialQuoteRequest extends FormRequest
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.line_discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.tax_name' => ['nullable', 'string', 'max:80'],
-            'items.*.tax_type' => ['nullable', Rule::in([CommercialQuoteTax::TYPE_TRASLADO, CommercialQuoteTax::TYPE_RETENCION])],
+            'items.*.tax_type' => ['nullable', Rule::in(CommercialQuoteTax::TYPES)],
             'items.*.tax_rate' => ['nullable', 'numeric', 'min:0'],
+            'items.*.taxes' => ['nullable', 'array'],
+            'items.*.taxes.*.tax_name' => ['nullable', 'string', 'max:80'],
+            'items.*.taxes.*.tax_type' => ['nullable', Rule::in(CommercialQuoteTax::TYPES)],
+            'items.*.taxes.*.tax_mode' => ['nullable', Rule::in(CommercialQuoteTax::MODES)],
+            'items.*.taxes.*.rate' => ['nullable', 'numeric', 'min:0'],
+            'items.*.taxes.*.base' => ['nullable', 'numeric'],
+            'items.*.taxes.*.amount' => ['nullable', 'numeric'],
+            'items.*.taxes.*.sort_order' => ['nullable', 'integer', 'min:1'],
             'items.*.notes' => ['nullable', 'string'],
         ];
     }

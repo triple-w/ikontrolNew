@@ -48,7 +48,14 @@ class CommercialQuotesTest extends TestCase
 
         $this->assertSame('232.000000', Decimal::normalize((string) $quote->total));
         $this->assertSame('Servicio comercial', $item->snapshot_name);
+        $this->assertNull($item->snapshot_tax_name);
         $this->assertSame('32.000000', Decimal::normalize((string) $item->tax_amount));
+        $this->assertDatabaseHas('commercial_quote_taxes', [
+            'commercial_quote_item_id' => $item->id,
+            'tax_name' => 'IVA',
+            'tax_type' => 'traslado',
+            'tax_mode' => 'rate',
+        ]);
     }
 
     public function test_global_discount_is_distributed_before_tax_calculation(): void
@@ -74,6 +81,123 @@ class CommercialQuotesTest extends TestCase
         $this->assertSame('30.000000', Decimal::normalize((string) $items[1]->global_discount_share));
         $this->assertSame('270.000000', Decimal::normalize((string) $items[1]->taxable_base));
         $this->assertSame('43.200000', Decimal::normalize((string) $items[1]->tax_amount));
+    }
+
+    public function test_quote_item_can_store_two_transfer_taxes(): void
+    {
+        $user = $this->createUser();
+        $clientId = $this->createCommercialClient($user->id, 'Cliente Dos Traslados');
+
+        $this->actingAs($user)->post(route('comercial.cotizaciones.store'), $this->quotePayload($clientId, [[
+            'snapshot_name' => 'Servicio gravado',
+            'quantity' => '1',
+            'unit_price' => '100',
+            'taxes' => [
+                ['tax_name' => 'IVA', 'tax_type' => 'traslado', 'tax_mode' => 'rate', 'rate' => '0.160000'],
+                ['tax_name' => 'ISH', 'tax_type' => 'traslado', 'tax_mode' => 'rate', 'rate' => '0.020000'],
+            ],
+        ]]))->assertRedirect();
+
+        $quote = DB::table('commercial_quotes')->first();
+
+        $this->assertSame('18.000000', Decimal::normalize((string) $quote->tax_total));
+        $this->assertSame('118.000000', Decimal::normalize((string) $quote->total));
+        $this->assertSame(2, DB::table('commercial_quote_taxes')->where('commercial_quote_id', $quote->id)->count());
+    }
+
+    public function test_quote_item_can_mix_transfer_and_retention(): void
+    {
+        $user = $this->createUser();
+        $clientId = $this->createCommercialClient($user->id, 'Cliente Retencion');
+
+        $this->actingAs($user)->post(route('comercial.cotizaciones.store'), $this->quotePayload($clientId, [[
+            'snapshot_name' => 'Servicio profesional',
+            'quantity' => '1',
+            'unit_price' => '100',
+            'taxes' => [
+                ['tax_name' => 'IVA', 'tax_type' => 'traslado', 'tax_mode' => 'rate', 'rate' => '0.160000'],
+                ['tax_name' => 'ISR', 'tax_type' => 'retencion', 'tax_mode' => 'rate', 'rate' => '0.100000'],
+            ],
+        ]]))->assertRedirect();
+
+        $quote = DB::table('commercial_quotes')->first();
+        $retention = DB::table('commercial_quote_taxes')->where('tax_type', 'retencion')->first();
+
+        $this->assertSame('6.000000', Decimal::normalize((string) $quote->tax_total));
+        $this->assertSame('106.000000', Decimal::normalize((string) $quote->total));
+        $this->assertSame('-10.000000', Decimal::normalize((string) $retention->amount));
+    }
+
+    public function test_zero_rate_and_exempt_taxes_are_distinct(): void
+    {
+        $user = $this->createUser();
+        $clientId = $this->createCommercialClient($user->id, 'Cliente Cero Exento');
+
+        $this->actingAs($user)->post(route('comercial.cotizaciones.store'), $this->quotePayload($clientId, [[
+            'snapshot_name' => 'Servicio mixto',
+            'quantity' => '1',
+            'unit_price' => '100',
+            'taxes' => [
+                ['tax_name' => 'IVA', 'tax_type' => 'traslado', 'tax_mode' => 'zero', 'rate' => '0'],
+                ['tax_name' => 'IEPS', 'tax_type' => 'traslado', 'tax_mode' => 'exempt', 'rate' => '0.160000'],
+            ],
+        ]]))->assertRedirect();
+
+        $zero = DB::table('commercial_quote_taxes')->where('tax_name', 'IVA')->first();
+        $exempt = DB::table('commercial_quote_taxes')->where('tax_name', 'IEPS')->first();
+
+        $this->assertSame('zero', $zero->tax_mode);
+        $this->assertSame('0.000000', Decimal::normalize((string) $zero->rate));
+        $this->assertSame('0.000000', Decimal::normalize((string) $zero->amount));
+        $this->assertSame('exempt', $exempt->tax_mode);
+        $this->assertSame('0.000000', Decimal::normalize((string) $exempt->rate));
+        $this->assertSame('0.000000', Decimal::normalize((string) $exempt->amount));
+    }
+
+    public function test_frontend_tax_base_and_amount_are_recalculated_by_backend(): void
+    {
+        $user = $this->createUser();
+        $clientId = $this->createCommercialClient($user->id, 'Cliente Manipulado');
+
+        $this->actingAs($user)->post(route('comercial.cotizaciones.store'), $this->quotePayload($clientId, [[
+            'snapshot_name' => 'Servicio seguro',
+            'quantity' => '1',
+            'unit_price' => '100',
+            'taxes' => [[
+                'tax_name' => 'IVA',
+                'tax_type' => 'traslado',
+                'tax_mode' => 'rate',
+                'rate' => '0.160000',
+                'base' => '999999',
+                'amount' => '999999',
+            ]],
+        ]]))->assertRedirect();
+
+        $tax = DB::table('commercial_quote_taxes')->first();
+
+        $this->assertSame('100.000000', Decimal::normalize((string) $tax->base));
+        $this->assertSame('16.000000', Decimal::normalize((string) $tax->amount));
+    }
+
+    public function test_preview_shows_transfers_and_retentions_without_fiscal_modules(): void
+    {
+        $user = $this->createUser();
+        $clientId = $this->createCommercialClient($user->id, 'Cliente Preview Impuestos');
+
+        $this->actingAs($user)
+            ->post(route('comercial.cotizaciones.preview-draft'), $this->quotePayload($clientId, [[
+                'snapshot_name' => 'Servicio temporal',
+                'quantity' => '1',
+                'unit_price' => '100',
+                'taxes' => [
+                    ['tax_name' => 'IVA', 'tax_type' => 'traslado', 'tax_mode' => 'rate', 'rate' => '0.160000'],
+                    ['tax_name' => 'ISR', 'tax_type' => 'retencion', 'tax_mode' => 'rate', 'rate' => '0.100000'],
+                ],
+            ]]))
+            ->assertOk()
+            ->assertSee('Traslados')
+            ->assertSee('Retenciones')
+            ->assertSee('Documento comercial no fiscal');
     }
 
     public function test_user_cannot_view_another_users_quote(): void
@@ -438,6 +562,7 @@ class CommercialQuotesTest extends TestCase
             $table->bigInteger('commercial_quote_item_id')->nullable();
             $table->string('tax_name', 80);
             $table->string('tax_type', 20);
+            $table->string('tax_mode', 20)->default('rate');
             $table->decimal('rate', 18, 6)->default(0);
             $table->decimal('base', 18, 6)->default(0);
             $table->decimal('amount', 18, 6)->default(0);
