@@ -59,6 +59,8 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
         Route::get('cotizaciones/crear', [CommercialQuoteController::class, 'create'])->name('cotizaciones.create');
         Route::post('cotizaciones', [CommercialQuoteController::class, 'store'])->name('cotizaciones.store');
         Route::post('cotizaciones/previsualizar', [CommercialQuoteController::class, 'previewDraft'])->name('cotizaciones.preview-draft');
+        Route::get('cotizaciones/previsualizar/{token}/editar', [CommercialQuoteController::class, 'editPreviewDraft'])->name('cotizaciones.preview-draft.edit');
+        Route::post('cotizaciones/previsualizar/{token}/guardar', [CommercialQuoteController::class, 'storePreviewDraft'])->name('cotizaciones.preview-draft.store');
         Route::get('cotizaciones/{commercialQuote}', [CommercialQuoteController::class, 'show'])->whereNumber('commercialQuote')->name('cotizaciones.show');
         Route::get('cotizaciones/{commercialQuote}/editar', [CommercialQuoteController::class, 'edit'])->whereNumber('commercialQuote')->name('cotizaciones.edit');
         Route::match(['put', 'patch'], 'cotizaciones/{commercialQuote}', [CommercialQuoteController::class, 'update'])->whereNumber('commercialQuote')->name('cotizaciones.update');
@@ -72,9 +74,14 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
 
         Route::get('cotizaciones/{commercialQuote}/crear-remision', [CommercialRemissionController::class, 'createFromQuote'])->whereNumber('commercialQuote')->name('cotizaciones.remisiones.create');
         Route::post('cotizaciones/{commercialQuote}/crear-remision', [CommercialRemissionController::class, 'store'])->whereNumber('commercialQuote')->name('cotizaciones.remisiones.store');
+        Route::get('remisiones/cotizaciones/buscar', [CommercialRemissionController::class, 'searchQuotes'])->name('remisiones.cotizaciones.search');
+        Route::get('remisiones/cotizaciones/{commercialQuote}/payload', [CommercialRemissionController::class, 'quotePayload'])->whereNumber('commercialQuote')->name('remisiones.cotizaciones.payload');
         Route::get('remisiones', [CommercialRemissionController::class, 'index'])->name('remisiones.index');
         Route::get('remisiones/crear', [CommercialRemissionController::class, 'create'])->name('remisiones.create');
         Route::post('remisiones', [CommercialRemissionController::class, 'store'])->name('remisiones.store');
+        Route::post('remisiones/previsualizar', [CommercialRemissionController::class, 'previewDraft'])->name('remisiones.preview-draft');
+        Route::get('remisiones/previsualizar/{token}/editar', [CommercialRemissionController::class, 'editPreviewDraft'])->name('remisiones.preview-draft.edit');
+        Route::post('remisiones/previsualizar/{token}/guardar', [CommercialRemissionController::class, 'storePreviewDraft'])->name('remisiones.preview-draft.store');
         Route::get('remisiones/{commercialRemission}', [CommercialRemissionController::class, 'show'])->whereNumber('commercialRemission')->name('remisiones.show');
         Route::get('remisiones/{commercialRemission}/editar', [CommercialRemissionController::class, 'edit'])->whereNumber('commercialRemission')->name('remisiones.edit');
         Route::match(['put', 'patch'], 'remisiones/{commercialRemission}', [CommercialRemissionController::class, 'update'])->whereNumber('commercialRemission')->name('remisiones.update');

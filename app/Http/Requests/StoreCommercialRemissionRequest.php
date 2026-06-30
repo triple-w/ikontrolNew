@@ -17,6 +17,7 @@ class StoreCommercialRemissionRequest extends FormRequest
     {
         return [
             'commercial_quote_id' => ['nullable', 'integer', Rule::exists('commercial_quotes', 'id')],
+            'accept_quote_on_save' => ['nullable', 'boolean'],
             'commercial_client_id' => ['required', 'integer', Rule::exists('commercial_clients', 'id')],
             'commercial_contact_id' => ['nullable', 'integer', Rule::exists('commercial_contacts', 'id')],
             'fiscal_client_id' => ['nullable', 'integer', Rule::exists('clientes', 'id')],
@@ -29,6 +30,7 @@ class StoreCommercialRemissionRequest extends FormRequest
             'conditions' => ['nullable', 'string'],
             'notes_visible' => ['nullable', 'string'],
             'notes_internal' => ['nullable', 'string'],
+            'save_action' => ['nullable', Rule::in(['draft', 'issue'])],
             'items' => ['required', 'array', 'min:1'],
             'items.*.commercial_quote_item_id' => ['nullable', 'integer', Rule::exists('commercial_quote_items', 'id')],
             'items.*.product_id' => ['nullable', 'integer', Rule::exists('productos', 'id')],

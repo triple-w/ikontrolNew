@@ -101,6 +101,58 @@ class CommercialRemissionsTest extends TestCase
         $this->assertSame(1, DB::table('commercial_remission_taxes')->count());
     }
 
+    public function test_remission_can_accept_draft_quote_only_after_successful_save(): void
+    {
+        $user = $this->createUser();
+        $clientId = $this->createCommercialClient($user->id);
+        [$quoteId, $quoteItemId] = $this->createAcceptedQuote($user->id, $clientId, '5.000000', 'draft');
+
+        $this->actingAs($user)
+            ->post(route('comercial.cotizaciones.remisiones.store', $quoteId), $this->remissionPayload($clientId, [
+                [
+                    'commercial_quote_item_id' => $quoteItemId,
+                    'snapshot_name' => 'Servicio parcial',
+                    'quantity' => '2',
+                    'unit_price' => '100',
+                ],
+            ], [
+                'commercial_quote_id' => $quoteId,
+                'accept_quote_on_save' => '1',
+            ]))
+            ->assertRedirect();
+
+        $this->assertDatabaseHas('commercial_quotes', ['id' => $quoteId, 'status' => 'accepted']);
+        $this->assertDatabaseHas('commercial_quote_status_history', [
+            'commercial_quote_id' => $quoteId,
+            'old_status' => 'draft',
+            'new_status' => 'accepted',
+        ]);
+    }
+
+    public function test_failed_remission_does_not_accept_quote(): void
+    {
+        $user = $this->createUser();
+        $clientId = $this->createCommercialClient($user->id);
+        [$quoteId, $quoteItemId] = $this->createAcceptedQuote($user->id, $clientId, '3.000000', 'sent');
+
+        $this->actingAs($user)
+            ->post(route('comercial.cotizaciones.remisiones.store', $quoteId), $this->remissionPayload($clientId, [
+                [
+                    'commercial_quote_item_id' => $quoteItemId,
+                    'snapshot_name' => 'Exceso',
+                    'quantity' => '4',
+                    'unit_price' => '100',
+                ],
+            ], [
+                'commercial_quote_id' => $quoteId,
+                'accept_quote_on_save' => '1',
+            ]))
+            ->assertSessionHasErrors('items.0.quantity');
+
+        $this->assertDatabaseHas('commercial_quotes', ['id' => $quoteId, 'status' => 'sent']);
+        $this->assertSame(0, DB::table('commercial_quote_status_history')->count());
+    }
+
     private function remissionPayload(int $clientId, array $items, array $overrides = []): array
     {
         return array_merge([
@@ -258,6 +310,17 @@ class CommercialRemissionsTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('commercial_quote_status_history', function ($table) {
+            $table->id();
+            $table->bigInteger('commercial_quote_id');
+            $table->string('old_status', 40)->nullable();
+            $table->string('new_status', 40);
+            $table->bigInteger('user_id')->nullable();
+            $table->text('note')->nullable();
+            $table->timestamp('changed_at');
+            $table->timestamps();
+        });
+
         Schema::create('commercial_remissions', function ($table) {
             $table->id();
             $table->bigInteger('users_id');
@@ -374,7 +437,7 @@ class CommercialRemissionsTest extends TestCase
         ]);
     }
 
-    private function createAcceptedQuote(int $userId, int $clientId, string $quantity): array
+    private function createAcceptedQuote(int $userId, int $clientId, string $quantity, string $status = 'accepted'): array
     {
         $quoteId = (int) DB::table('commercial_quotes')->insertGetId([
             'users_id' => $userId,
@@ -385,7 +448,7 @@ class CommercialRemissionsTest extends TestCase
             'folio' => 'COT-000001',
             'issued_at' => '2026-06-30',
             'currency' => 'MXN',
-            'status' => 'accepted',
+            'status' => $status,
             'subtotal' => '1000.000000',
             'discount_total' => '0.000000',
             'tax_total' => '160.000000',

@@ -23,6 +23,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class CommercialQuoteController extends Controller
@@ -130,6 +131,7 @@ class CommercialQuoteController extends Controller
             'documentTemplate',
             'items.taxes',
             'taxes',
+            'remissions.items',
             'statusHistory.user',
         ]);
 
@@ -228,11 +230,105 @@ class CommercialQuoteController extends Controller
         $client = $this->validatedClient($data['commercial_client_id'], $request->user());
         $this->validateRelatedIds($data, (int) $client->users_id, (int) $client->id);
         $template = $this->validatedTemplate($data['commercial_document_template_id'] ?? null, (int) $client->users_id);
+        $quoteId = $request->filled('preview_quote_id') ? (int) $request->input('preview_quote_id') : null;
+        if ($quoteId) {
+            $quote = CommercialQuote::query()->visibleTo($request->user())->find($quoteId);
+            if (!$quote) {
+                throw ValidationException::withMessages(['preview_quote_id' => 'La cotizacion temporal no pertenece al usuario autorizado.']);
+            }
+        }
+
+        $token = $this->storePreviewSession($request, $data, $quoteId);
 
         return view('comercial.cotizaciones.preview', [
             'document' => $builder->fromPayload($data, (int) $client->users_id, $template),
-            'backUrl' => url()->previous(),
+            'backUrl' => route('comercial.cotizaciones.preview-draft.edit', $token),
+            'previewToken' => $token,
         ]);
+    }
+
+    public function editPreviewDraft(Request $request, string $token)
+    {
+        $payload = $this->previewSessionPayload($request, $token);
+        if (!empty($payload['used'])) {
+            abort(409);
+        }
+        $request->session()->put($this->previewSessionKey($token), array_merge($payload, ['used' => true]));
+        $data = $payload['data'];
+        $quote = !empty($payload['quote_id'])
+            ? CommercialQuote::query()->visibleTo($request->user())->find((int) $payload['quote_id'])
+            : new CommercialQuote();
+
+        if (!$quote) {
+            abort(404);
+        }
+
+        $quote->forceFill([
+            'commercial_client_id' => $data['commercial_client_id'],
+            'commercial_contact_id' => $data['commercial_contact_id'] ?? null,
+            'fiscal_client_id' => $data['fiscal_client_id'] ?? null,
+            'commercial_document_template_id' => $data['commercial_document_template_id'] ?? null,
+            'assigned_user_id' => $data['assigned_user_id'] ?? null,
+            'issued_at' => $data['issued_at'],
+            'expires_at' => $data['expires_at'] ?? null,
+            'currency' => $data['currency'] ?? 'MXN',
+            'exchange_rate' => $data['exchange_rate'] ?? null,
+            'global_discount_amount' => $data['global_discount_amount'] ?? '0.000000',
+            'commercial_terms' => $data['commercial_terms'] ?? null,
+            'customer_notes' => $data['customer_notes'] ?? null,
+            'internal_notes' => $data['internal_notes'] ?? null,
+        ]);
+
+        return view($quote->exists ? 'comercial.cotizaciones.edit' : 'comercial.cotizaciones.create', [
+            'quote' => $quote,
+            'clients' => $this->clientOptionsForFilter($request->user()),
+            'users' => $this->userOptions(),
+            'items' => $data['items'] ?? [],
+            'clientOptionsUrl' => route('comercial.cotizaciones.client-options', ['commercialClient' => '__CLIENT__']),
+            'productSearchUrl' => route('comercial.cotizaciones.search-productos'),
+            'templates' => $this->templateOptions((int) ($quote->users_id ?: $request->user()->id), (int) ($data['commercial_document_template_id'] ?? 0)),
+            'defaultTemplateId' => $this->defaultTemplateId((int) ($quote->users_id ?: $request->user()->id)),
+            'previewDraftUrl' => route('comercial.cotizaciones.preview-draft'),
+        ]);
+    }
+
+    public function storePreviewDraft(Request $request, string $token, CommercialQuoteCalculator $calculator, CommercialQuoteFolioService $folioService, CommercialTemplateSnapshotter $snapshotter)
+    {
+        $payload = $this->previewSessionPayload($request, $token);
+        $data = $payload['data'];
+        $data['save_action'] = $request->input('save_action') === 'send' ? 'send' : 'draft';
+
+        $client = $this->validatedClient((int) $data['commercial_client_id'], $request->user());
+        $this->validateRelatedIds($data, (int) $client->users_id, (int) $client->id);
+        $this->validatedTemplate($data['commercial_document_template_id'] ?? null, (int) $client->users_id);
+        $calculated = $calculator->calculate($this->payloadItems($data['items']), (string) ($data['global_discount_amount'] ?? '0'));
+
+        if (!empty($payload['quote_id'])) {
+            $quote = CommercialQuote::query()->visibleTo($request->user())->findOrFail((int) $payload['quote_id']);
+            $this->authorize('update', $quote);
+            $this->ensureEditable($quote);
+
+            DB::transaction(function () use ($quote, $data, $client, $calculated, $request, $snapshotter) {
+                $oldStatus = $quote->status;
+                $status = $data['save_action'] === 'send' && $oldStatus === CommercialQuote::STATUS_DRAFT
+                    ? CommercialQuote::STATUS_SENT
+                    : $oldStatus;
+                $quote->update($this->quotePayload($data, $client, $calculated, $status));
+                $quote->taxes()->delete();
+                $quote->items()->delete();
+                $this->storeItems($quote, $calculated['items']);
+                if ($status !== $oldStatus) {
+                    $snapshotter->ensureSnapshot($quote->fresh(['documentTemplate']));
+                    $this->recordStatus($quote, $oldStatus, $status, (int) $request->user()->id, 'Guardada desde previsualizacion.');
+                }
+            });
+        } else {
+            $quote = $this->createWithRetry($data, $client, $calculated, $request, $folioService, $snapshotter);
+        }
+
+        $request->session()->forget($this->previewSessionKey($token));
+
+        return redirect()->route('comercial.cotizaciones.show', $quote)->with('status', 'Cotizacion guardada desde previsualizacion.');
     }
 
     public function preview(CommercialQuote $commercialQuote, CommercialQuoteDocumentBuilder $builder)
@@ -366,6 +462,39 @@ class CommercialQuoteController extends Controller
         }
 
         throw $lastException ?? new \RuntimeException('No fue posible crear la cotizacion.');
+    }
+
+    private function storePreviewSession(Request $request, array $data, ?int $quoteId = null): string
+    {
+        $token = (string) Str::uuid();
+        $request->session()->put($this->previewSessionKey($token), [
+            'user_id' => (int) $request->user()->id,
+            'quote_id' => $quoteId,
+            'data' => $data,
+            'created_at' => now()->timestamp,
+        ]);
+
+        return $token;
+    }
+
+    private function previewSessionPayload(Request $request, string $token): array
+    {
+        $payload = $request->session()->get($this->previewSessionKey($token));
+        if (!$payload || (int) ($payload['user_id'] ?? 0) !== (int) $request->user()->id) {
+            abort(404);
+        }
+
+        if ((int) ($payload['created_at'] ?? 0) < now()->subHours(2)->timestamp) {
+            $request->session()->forget($this->previewSessionKey($token));
+            abort(404);
+        }
+
+        return $payload;
+    }
+
+    private function previewSessionKey(string $token): string
+    {
+        return 'commercial_quote_preview.' . $token;
     }
 
     private function quotePayload(array $data, CommercialClient $client, array $calculated, string $status): array

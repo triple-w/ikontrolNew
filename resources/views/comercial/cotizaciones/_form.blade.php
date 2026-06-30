@@ -40,6 +40,9 @@
     @if(($method ?? 'POST') !== 'POST')
         <input x-ref="methodOverride" type="hidden" name="_method" value="{{ $method }}">
     @endif
+    @if($quote->exists)
+        <input type="hidden" name="preview_quote_id" value="{{ $quote->id }}">
+    @endif
 
     @if($errors->any())
         <x-ikontrol.info-alert title="Revisa la cotizacion">{{ $errors->first() }}</x-ikontrol.info-alert>
@@ -253,7 +256,6 @@
                         type="submit"
                         formaction="{{ $previewDraftUrl }}"
                         formmethod="POST"
-                        formtarget="_blank"
                         @click="if ($refs.methodOverride) { $refs.methodOverride.disabled = true; setTimeout(() => $refs.methodOverride.disabled = false, 1000); }"
                         class="block w-full rounded-md border border-gray-200 bg-white px-4 py-2 text-center text-sm font-medium text-gray-700"
                     >Previsualizar cotizacion</button>

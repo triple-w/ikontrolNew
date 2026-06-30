@@ -8,14 +8,17 @@ use App\Models\CommercialContact;
 use App\Models\CommercialDocumentTemplate;
 use App\Models\CommercialRemission;
 use App\Models\CommercialRemissionTax;
+use App\Services\CommercialQuoteCalculator;
 use App\Support\Decimal;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class CommercialRemissionDocumentBuilder
 {
-    public function __construct(private readonly TemplateVariableResolver $resolver)
-    {
+    public function __construct(
+        private readonly CommercialQuoteCalculator $calculator,
+        private readonly TemplateVariableResolver $resolver
+    ) {
     }
 
     public function fromRemission(CommercialRemission $remission): array
@@ -62,6 +65,70 @@ class CommercialRemissionDocumentBuilder
             items: $items,
             logoPath: $template['logo_path'] ?? null
         );
+    }
+
+    public function fromPayload(array $data, int $ownerId, ?CommercialDocumentTemplate $template): array
+    {
+        $client = CommercialClient::query()->find($data['commercial_client_id']);
+        $contact = !empty($data['commercial_contact_id'])
+            ? CommercialContact::query()->find($data['commercial_contact_id'])
+            : null;
+        $fiscalClient = !empty($data['fiscal_client_id'])
+            ? Cliente::query()->find($data['fiscal_client_id'])
+            : null;
+
+        $calculated = $this->calculator->calculate($this->payloadItems($data['items']), (string) ($data['global_discount_amount'] ?? '0'));
+        $remission = new CommercialRemission([
+            'users_id' => $ownerId,
+            'commercial_quote_id' => $data['commercial_quote_id'] ?? null,
+            'commercial_client_id' => $data['commercial_client_id'],
+            'commercial_contact_id' => $data['commercial_contact_id'] ?? null,
+            'fiscal_client_id' => $data['fiscal_client_id'] ?? null,
+            'commercial_document_template_id' => $template?->id,
+            'folio' => 'Borrador',
+            'issue_date' => $data['issue_date'],
+            'currency' => strtoupper((string) ($data['currency'] ?? 'MXN')),
+            'exchange_rate' => $data['exchange_rate'] ?? null,
+            'status' => CommercialRemission::STATUS_DRAFT,
+            'conditions' => $data['conditions'] ?? null,
+            'notes_visible' => $data['notes_visible'] ?? null,
+            'notes_internal' => $data['notes_internal'] ?? null,
+        ]);
+        $remission->forceFill([
+            'subtotal' => $calculated['totals']['subtotal'],
+            'line_discount_total' => $calculated['totals']['line_discount_total'],
+            'global_discount_amount' => $calculated['totals']['global_discount_amount'],
+            'discount_total' => $calculated['totals']['discount_total'],
+            'transfers_total' => $calculated['totals']['tax_transfers_total'] ?? '0.000000',
+            'withholdings_total' => $calculated['totals']['tax_retentions_total'] ?? '0.000000',
+            'tax_total' => $calculated['totals']['tax_total'],
+            'total' => $calculated['totals']['total'],
+        ]);
+
+        $items = collect($calculated['items'])->map(fn (array $item) => [
+            'sku' => $item['sku'] ?? null,
+            'name' => $item['snapshot_name'],
+            'description' => $item['snapshot_description'] ?? null,
+            'unit' => $item['snapshot_unit'] ?? null,
+            'quantity' => $item['quantity'],
+            'unit_price' => $item['unit_price'],
+            'discount' => $item['line_discount_amount'],
+            'taxes' => $item['taxes'] ?? [],
+            'tax_amount' => $item['tax_amount'],
+            'line_subtotal' => $item['line_subtotal'],
+            'line_total' => $item['line_total'],
+            'notes' => $item['notes'] ?? null,
+        ])->all();
+
+        return array_merge($this->buildDocument(
+            remission: $remission,
+            template: $this->templateArray($template),
+            client: $client,
+            contact: $contact,
+            fiscalClient: $fiscalClient,
+            items: $items,
+            logoPath: $template?->logo_path
+        ), ['isTemporary' => true]);
     }
 
     private function buildDocument(
@@ -117,7 +184,39 @@ class CommercialRemissionDocumentBuilder
                 'footer_text' => $this->resolver->resolve($template['footer_text'] ?? '', $context),
                 'terms_text' => $this->resolver->resolve($template['terms_text'] ?? '', $context),
             ],
+            'isTemporary' => false,
         ];
+    }
+
+    private function payloadItems(array $items): array
+    {
+        return collect($items)->values()->map(fn (array $item) => [
+            'commercial_quote_item_id' => $item['commercial_quote_item_id'] ?? null,
+            'product_id' => $item['product_id'] ?? null,
+            'sku' => $item['sku'] ?? null,
+            'snapshot_name' => trim((string) $item['snapshot_name']),
+            'snapshot_description' => $item['snapshot_description'] ?? null,
+            'snapshot_unit' => $item['snapshot_unit'] ?? null,
+            'quantity' => (string) ($item['quantity'] ?? '0'),
+            'unit_price' => (string) ($item['unit_price'] ?? '0'),
+            'line_discount_amount' => (string) ($item['line_discount_amount'] ?? '0'),
+            'taxes' => $this->taxPayloads($item),
+            'notes' => $item['notes'] ?? null,
+        ])->all();
+    }
+
+    private function taxPayloads(array $item): array
+    {
+        return collect($item['taxes'] ?? [])
+            ->filter(fn ($tax) => is_array($tax) && trim((string) ($tax['tax_name'] ?? '')) !== '')
+            ->map(fn (array $tax) => [
+                'tax_name' => trim((string) ($tax['tax_name'] ?? '')),
+                'tax_type' => (string) ($tax['tax_type'] ?? 'traslado'),
+                'tax_mode' => (string) ($tax['tax_mode'] ?? 'rate'),
+                'rate' => (string) ($tax['rate'] ?? '0'),
+            ])
+            ->values()
+            ->all();
     }
 
     private function templateForRemission(CommercialRemission $remission): array

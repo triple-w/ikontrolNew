@@ -16,6 +16,9 @@
             @if($quote->canBeEdited())
                 <x-ikontrol.primary-link href="{{ route('comercial.cotizaciones.edit', $quote) }}">Editar</x-ikontrol.primary-link>
             @endif
+            @if(in_array($quote->status, [\App\Models\CommercialQuote::STATUS_DRAFT, \App\Models\CommercialQuote::STATUS_SENT, \App\Models\CommercialQuote::STATUS_ACCEPTED], true))
+                <x-ikontrol.primary-link href="{{ route('comercial.cotizaciones.remisiones.create', $quote) }}">Remisionar</x-ikontrol.primary-link>
+            @endif
             <x-ikontrol.secondary-link href="{{ route('comercial.cotizaciones.preview', $quote) }}">Previsualizar</x-ikontrol.secondary-link>
             <x-ikontrol.secondary-link href="{{ route('comercial.cotizaciones.pdf', $quote) }}">PDF</x-ikontrol.secondary-link>
             <x-ikontrol.secondary-link href="{{ route('comercial.cotizaciones.print', $quote) }}">Imprimir</x-ikontrol.secondary-link>
@@ -119,11 +122,33 @@
                     </dl>
                 </x-ikontrol.module-section>
 
-                @if($quote->status === \App\Models\CommercialQuote::STATUS_ACCEPTED)
-                    <x-ikontrol.module-section title="Remision futura">
+                @if(in_array($quote->status, [\App\Models\CommercialQuote::STATUS_DRAFT, \App\Models\CommercialQuote::STATUS_SENT, \App\Models\CommercialQuote::STATUS_ACCEPTED], true))
+                    @php
+                        $quotedQty = $quote->items->reduce(fn ($carry, $item) => \App\Support\Decimal::add($carry, (string) $item->quantity), '0');
+                        $remittedQty = $quote->remissions
+                            ->where('status', '!=', \App\Models\CommercialRemission::STATUS_CANCELLED)
+                            ->flatMap->items
+                            ->reduce(fn ($carry, $item) => \App\Support\Decimal::add($carry, (string) $item->quantity), '0');
+                        $pendingQty = \App\Support\Decimal::max(\App\Support\Decimal::sub($quotedQty, $remittedQty), '0');
+                    @endphp
+                    <x-ikontrol.module-section title="Remisiones">
                         <div class="space-y-3">
-                            <p class="text-sm text-gray-500">Crea una remision parcial o total a partir de esta cotizacion aceptada.</p>
-                            <x-ikontrol.primary-link href="{{ route('comercial.cotizaciones.remisiones.create', $quote) }}">Crear remision</x-ikontrol.primary-link>
+                            <div class="grid grid-cols-3 gap-3 text-sm">
+                                <div class="rounded-md bg-gray-50 p-3"><div class="text-xs text-gray-500">Cotizado</div><div class="font-semibold">{{ \App\Support\Decimal::format($quotedQty, 6) }}</div></div>
+                                <div class="rounded-md bg-gray-50 p-3"><div class="text-xs text-gray-500">Remitido</div><div class="font-semibold">{{ \App\Support\Decimal::format($remittedQty, 6) }}</div></div>
+                                <div class="rounded-md bg-gray-50 p-3"><div class="text-xs text-gray-500">Pendiente</div><div class="font-semibold">{{ \App\Support\Decimal::format($pendingQty, 6) }}</div></div>
+                            </div>
+                            <x-ikontrol.primary-link href="{{ route('comercial.cotizaciones.remisiones.create', $quote) }}">Remisionar</x-ikontrol.primary-link>
+                            <div class="space-y-2">
+                                @forelse($quote->remissions as $remission)
+                                    <a href="{{ route('comercial.remisiones.show', $remission) }}" class="block rounded-md border border-gray-200 p-3 text-sm hover:bg-gray-50">
+                                        <span class="font-medium">{{ $remission->folio }}</span>
+                                        <span class="text-gray-500"> / {{ $remission->status }} / ${{ \App\Support\Decimal::format($remission->total) }}</span>
+                                    </a>
+                                @empty
+                                    <p class="text-sm text-gray-500">Aun no hay remisiones asociadas.</p>
+                                @endforelse
+                            </div>
                         </div>
                     </x-ikontrol.module-section>
                 @endif

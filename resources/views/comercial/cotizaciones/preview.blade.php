@@ -8,8 +8,21 @@
                 </p>
             </div>
             <div class="flex flex-wrap gap-2">
-                <a href="{{ $backUrl }}" class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">Volver</a>
-                @if(!$document['isTemporary'])
+                @if($document['isTemporary'])
+                    <a href="{{ $backUrl }}" class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">Volver a editar</a>
+                    <form method="POST" action="{{ route('comercial.cotizaciones.preview-draft.store', $previewToken) }}">
+                        @csrf
+                        <button name="save_action" value="draft" class="rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white">Guardar borrador</button>
+                    </form>
+                    <form method="POST" action="{{ route('comercial.cotizaciones.preview-draft.store', $previewToken) }}">
+                        @csrf
+                        <button name="save_action" value="send" class="rounded-md border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700">Guardar y enviar</button>
+                    </form>
+                @else
+                    <a href="{{ $backUrl }}" class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">Volver</a>
+                    @if($document['quote']->canBeEdited())
+                        <a href="{{ route('comercial.cotizaciones.edit', $document['quote']) }}" class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">Editar</a>
+                    @endif
                     <a href="{{ route('comercial.cotizaciones.pdf', $document['quote']) }}" class="rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white">PDF</a>
                 @endif
             </div>

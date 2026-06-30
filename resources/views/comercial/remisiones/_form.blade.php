@@ -20,6 +20,8 @@
     $contactId = old('commercial_contact_id', $remission->commercial_contact_id);
     $fiscalId = old('fiscal_client_id', $remission->fiscal_client_id);
     $selectedTemplateId = old('commercial_document_template_id', $remission->commercial_document_template_id ?: $defaultTemplateId);
+    $commercialQuoteId = old('commercial_quote_id', $remission->commercial_quote_id);
+    $acceptQuoteOnSave = old('accept_quote_on_save', $quote && $quote->status === \App\Models\CommercialQuote::STATUS_ACCEPTED ? '1' : '');
 @endphp
 
 <form
@@ -29,9 +31,16 @@
     x-data="commercialRemissionForm({
         clientOptionsUrl: @js($clientOptionsUrl),
         productSearchUrl: @js($productSearchUrl),
+        quoteSearchUrl: @js($quoteSearchUrl),
+        quotePayloadUrl: @js($quotePayloadUrl),
         clientId: @js((string) $clientId),
         contactId: @js((string) $contactId),
         fiscalId: @js((string) $fiscalId),
+        templateId: @js((string) $selectedTemplateId),
+        commercialQuoteId: @js((string) $commercialQuoteId),
+        quoteLocked: @js((bool) $quote),
+        quoteStatus: @js($quote?->status),
+        acceptQuoteOnSave: @js((bool) $acceptQuoteOnSave),
         initialItems: @js($formItems),
         globalDiscount: @js(old('global_discount_amount', $remission->global_discount_amount ?? '0.000000')),
     })"
@@ -39,9 +48,12 @@
 >
     @csrf
     @if(($method ?? 'POST') !== 'POST')
-        @method($method)
+        <input x-ref="methodOverride" type="hidden" name="_method" value="{{ $method }}">
     @endif
-    <input type="hidden" name="commercial_quote_id" value="{{ old('commercial_quote_id', $remission->commercial_quote_id) }}">
+    @if($remission->exists)
+        <input type="hidden" name="preview_remission_id" value="{{ $remission->id }}">
+    @endif
+    <input type="hidden" name="commercial_quote_id" x-model="commercialQuoteId">
 
     @if($errors->any())
         <x-ikontrol.info-alert title="Revisa la remision">{{ $errors->first() }}</x-ikontrol.info-alert>
@@ -49,6 +61,29 @@
 
     <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div class="space-y-6 xl:col-span-2">
+            @unless($quote)
+                <x-ikontrol.module-section title="Origen desde cotizacion">
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input type="checkbox" x-model="loadFromQuote" class="rounded border-gray-300 text-violet-600">
+                        <span>Cargar datos desde una cotizacion</span>
+                    </label>
+                    <div x-show="loadFromQuote" x-cloak class="mt-4 space-y-3">
+                        <div class="relative">
+                            <input type="search" x-model="quoteSearch.query" @input.debounce.300ms="searchQuotes" class="w-full rounded-md border-gray-300" placeholder="Buscar por folio, cliente, nombre comercial o estatus">
+                            <div x-show="quoteSearch.results.length" x-cloak class="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+                                <template x-for="quoteOption in quoteSearch.results" :key="quoteOption.id">
+                                    <button type="button" @click="loadQuote(quoteOption.id)" class="block w-full px-4 py-3 text-left text-sm hover:bg-gray-50">
+                                        <span class="font-medium text-gray-900" x-text="quoteOption.folio"></span>
+                                        <span class="mt-1 block text-xs text-gray-500" x-text="`${quoteOption.client || 'Sin cliente'} / ${quoteOption.status} / $${money(quoteOption.total)}`"></span>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
+                        <div x-show="quoteSummary" class="rounded-md border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800" x-text="quoteSummary"></div>
+                    </div>
+                </x-ikontrol.module-section>
+            @endunless
+
             <x-ikontrol.module-section title="Cliente y documento">
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div>
@@ -81,7 +116,7 @@
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-gray-700">Formato comercial</label>
-                        <select name="commercial_document_template_id" class="w-full rounded-md border-gray-300">
+                        <select name="commercial_document_template_id" x-model="templateId" class="w-full rounded-md border-gray-300">
                             <option value="">Formato simple del sistema</option>
                             @foreach($templates as $template)
                                 <option value="{{ $template->id }}" @selected((string) $selectedTemplateId === (string) $template->id)>{{ $template->name }}</option>
@@ -115,6 +150,19 @@
                         </select>
                     </div>
                 </div>
+            </x-ikontrol.module-section>
+
+            <x-ikontrol.module-section title="Estado de cotizacion origen" x-show="commercialQuoteId" x-cloak>
+                <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input type="checkbox" name="accept_quote_on_save" value="1" x-model="acceptQuoteOnSave" :disabled="quoteStatus === 'accepted'" class="rounded border-gray-300 text-violet-600">
+                    <span>Marcar cotizacion como aceptada al guardar esta remision</span>
+                </label>
+                <template x-if="quoteStatus === 'accepted'">
+                    <p class="mt-2 text-xs text-gray-500">La cotizacion ya esta aceptada.</p>
+                </template>
+                <template x-if="quoteStatus === 'accepted'">
+                    <input type="hidden" name="accept_quote_on_save" value="1">
+                </template>
             </x-ikontrol.module-section>
 
             <x-ikontrol.module-section title="Partidas" description="Las cantidades desde cotizacion no pueden exceder el pendiente por partida.">
@@ -232,7 +280,15 @@
 
             <x-ikontrol.module-section title="Acciones">
                 <div class="space-y-3">
-                    <button class="block w-full rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white">Guardar remision</button>
+                    <button
+                        type="submit"
+                        formaction="{{ $previewDraftUrl }}"
+                        formmethod="POST"
+                        @click="if ($refs.methodOverride) { $refs.methodOverride.disabled = true; setTimeout(() => $refs.methodOverride.disabled = false, 1000); }"
+                        class="block w-full rounded-md border border-gray-200 bg-white px-4 py-2 text-center text-sm font-medium text-gray-700"
+                    >Previsualizar remision</button>
+                    <button name="save_action" value="draft" class="block w-full rounded-md bg-violet-600 px-4 py-2 text-sm font-medium text-white">Guardar borrador</button>
+                    <button name="save_action" value="issue" class="block w-full rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">Guardar y emitir</button>
                     <a href="{{ route('comercial.remisiones.index') }}" class="block w-full rounded-md border border-gray-200 bg-white px-4 py-2 text-center text-sm font-medium text-gray-700">Cancelar</a>
                 </div>
             </x-ikontrol.module-section>
@@ -247,13 +303,23 @@
                 Alpine.data('commercialRemissionForm', (config) => ({
                     clientOptionsUrl: config.clientOptionsUrl,
                     productSearchUrl: config.productSearchUrl,
+                    quoteSearchUrl: config.quoteSearchUrl,
+                    quotePayloadUrl: config.quotePayloadUrl,
                     clientId: config.clientId || '',
                     contactId: config.contactId || '',
                     fiscalId: config.fiscalId || '',
+                    templateId: config.templateId || '',
+                    commercialQuoteId: config.commercialQuoteId || '',
+                    quoteLocked: Boolean(config.quoteLocked),
+                    quoteStatus: config.quoteStatus || '',
+                    acceptQuoteOnSave: Boolean(config.acceptQuoteOnSave),
+                    loadFromQuote: Boolean(config.commercialQuoteId),
+                    quoteSummary: '',
                     contacts: [],
                     fiscalClients: [],
                     globalDiscount: config.globalDiscount || '0',
                     productSearch: { query: '', open: false, results: [] },
+                    quoteSearch: { query: '', results: [] },
                     activeTaxRowIndex: -1,
                     taxDrawer: { open: false, error: '' },
                     taxesDraft: [],
@@ -296,6 +362,53 @@
                         const response = await fetch(`${this.productSearchUrl}?q=${encodeURIComponent(q)}&commercial_client_id=${encodeURIComponent(this.clientId || '')}`, { headers: { 'Accept': 'application/json' } });
                         const payload = await response.json();
                         this.productSearch.results = payload.data || [];
+                    },
+                    async searchQuotes() {
+                        const q = (this.quoteSearch.query || '').trim();
+                        if (q.length < 2) { this.quoteSearch.results = []; return; }
+                        const response = await fetch(`${this.quoteSearchUrl}?q=${encodeURIComponent(q)}`, { headers: { 'Accept': 'application/json' } });
+                        const payload = await response.json();
+                        this.quoteSearch.results = payload.data || [];
+                    },
+                    async loadQuote(quoteId) {
+                        if (this.items.length > 1 || (this.items[0] && (this.items[0].snapshot_name || this.items[0].taxes.length))) {
+                            if (!window.confirm('Se reemplazaran las partidas precargadas por las de la cotizacion seleccionada.')) return;
+                        }
+                        const response = await fetch(this.quotePayloadUrl.replace('__QUOTE__', encodeURIComponent(quoteId)), { headers: { 'Accept': 'application/json' } });
+                        const payload = await response.json();
+                        const quote = payload.quote || {};
+                        this.commercialQuoteId = quote.id || '';
+                        this.quoteStatus = quote.status || '';
+                        this.acceptQuoteOnSave = this.quoteStatus === 'accepted';
+                        this.clientId = quote.commercial_client_id ? String(quote.commercial_client_id) : '';
+                        this.contactId = quote.commercial_contact_id ? String(quote.commercial_contact_id) : '';
+                        this.fiscalId = quote.fiscal_client_id ? String(quote.fiscal_client_id) : '';
+                        this.templateId = quote.commercial_document_template_id ? String(quote.commercial_document_template_id) : '';
+                        this.globalDiscount = quote.global_discount_amount || '0';
+                        const conditions = document.querySelector('[name="conditions"]');
+                        const notesVisible = document.querySelector('[name="notes_visible"]');
+                        if (conditions) conditions.value = quote.conditions || '';
+                        if (notesVisible) notesVisible.value = quote.notes_visible || '';
+                        this.items = (payload.items || []).map((item, index) => ({
+                            uid: `${Date.now()}-quote-${index}`,
+                            commercial_quote_item_id: item.commercial_quote_item_id || '',
+                            product_id: item.product_id || '',
+                            sku: item.sku || '',
+                            snapshot_name: item.snapshot_name || '',
+                            snapshot_description: item.snapshot_description || '',
+                            snapshot_unit: item.snapshot_unit || '',
+                            quantity: item.quantity || '1',
+                            quoted_quantity: item.quoted_quantity || '',
+                            previously_remitted_quantity: item.previously_remitted_quantity || '',
+                            pending_quantity: item.pending_quantity || '',
+                            unit_price: item.unit_price || '0',
+                            line_discount_amount: item.line_discount_amount || '0',
+                            taxes: this.cloneTaxes(item.taxes || []),
+                            notes: item.notes || '',
+                        }));
+                        this.quoteSummary = `${quote.folio || 'Cotizacion'} cargada. Revisa cantidades pendientes antes de guardar.`;
+                        this.quoteSearch = { query: '', results: [] };
+                        await this.loadClientOptions();
                     },
                     addProduct(product) {
                         this.items.push({ uid: `${Date.now()}-${this.items.length}`, commercial_quote_item_id: '', product_id: product.id || '', sku: product.sku || '', snapshot_name: product.snapshot_name || '', snapshot_description: product.snapshot_description || '', snapshot_unit: product.snapshot_unit || '', quantity: '1', unit_price: product.unit_price || '0', line_discount_amount: '0', taxes: product.taxes || [], notes: '' });

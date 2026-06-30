@@ -94,6 +94,9 @@
                                     @if($quote->canBeEdited())
                                         <a class="ml-3 text-violet-600 hover:underline" href="{{ route('comercial.cotizaciones.edit', $quote) }}">Editar</a>
                                     @endif
+                                    @if(in_array($quote->status, [\App\Models\CommercialQuote::STATUS_DRAFT, \App\Models\CommercialQuote::STATUS_SENT, \App\Models\CommercialQuote::STATUS_ACCEPTED], true))
+                                        <a class="ml-3 text-violet-600 hover:underline" href="{{ route('comercial.cotizaciones.remisiones.create', $quote) }}">Remisionar</a>
+                                    @endif
                                 </td>
                             </tr>
                         @empty
