@@ -1,5 +1,5 @@
 <x-app-layout>
-    <div class="px-4 sm:px-6 lg:px-8 py-8 w-full max-w-7xl mx-auto">
+    <x-ikontrol.page-shell>
         <x-ikontrol.page-header
             title="Formatos de documentos"
             description="Administra formatos comerciales para cotizaciones, remisiones futuras y otros documentos."
@@ -9,7 +9,7 @@
         />
 
         @if(session('status'))
-            <div class="mb-6">
+            <div>
                 <x-ikontrol.info-alert title="Listo">{{ session('status') }}</x-ikontrol.info-alert>
             </div>
         @endif
@@ -68,5 +68,5 @@
                 {{ $templates->links() }}
             </div>
         </x-ikontrol.module-section>
-    </div>
+    </x-ikontrol.page-shell>
 </x-app-layout>

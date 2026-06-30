@@ -1,5 +1,5 @@
 <x-app-layout>
-    <div class="px-4 sm:px-6 lg:px-8 py-8 w-full max-w-7xl mx-auto">
+    <x-ikontrol.page-shell>
         <x-ikontrol.page-header
             title="Editar cotizacion"
             :description="$quote->folio"
@@ -10,5 +10,5 @@
             'action' => route('comercial.cotizaciones.update', $quote),
             'method' => 'PUT',
         ])
-    </div>
+    </x-ikontrol.page-shell>
 </x-app-layout>

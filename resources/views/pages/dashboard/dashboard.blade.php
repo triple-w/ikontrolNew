@@ -1,5 +1,5 @@
 <x-app-layout>
-    <div class="mx-auto w-full max-w-9xl min-w-0 px-4 py-8 sm:px-6 lg:px-8">
+    <x-ikontrol.page-shell max-width="wide">
         @php
             $factucareDashboardPayload = [
                 'kpis' => $kpis ?? [],
@@ -20,7 +20,7 @@
             window.factucareDashboard = @json($factucareDashboardPayload);
         </script>
 
-        <div class="mb-8 flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div class="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div class="min-w-0">
                 <x-ikontrol.page-header
                     title="Dashboard iKontrol"
@@ -87,7 +87,7 @@
             </div>
         </div>
 
-        <div class="mt-6 grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-3">
+        <div class="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-3">
             <div class="min-w-0 space-y-6 xl:col-span-2">
                 <x-ikontrol.module-section title="Documentos fiscales" description="Resumen del periodo seleccionado con los calculos existentes del dashboard.">
                     <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-3">
@@ -134,7 +134,7 @@
             </div>
         </div>
 
-        <div class="mt-6">
+        <div>
             <x-ikontrol.module-section title="Pendientes operativos">
                 <x-ikontrol.empty-table
                     :columns="['Modulo', 'Responsable', 'Estado']"
@@ -142,5 +142,5 @@
                 />
             </x-ikontrol.module-section>
         </div>
-    </div>
+    </x-ikontrol.page-shell>
 </x-app-layout>

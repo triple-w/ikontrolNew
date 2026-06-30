@@ -139,6 +139,14 @@
                     </div>
                 </div>
 
+                <div
+                    x-show="taxFeedback"
+                    x-transition
+                    x-cloak
+                    class="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+                    x-text="taxFeedback"
+                ></div>
+
                 <div class="overflow-x-auto rounded-lg border border-gray-200">
                     <table class="min-w-[980px] w-full text-sm">
                         <thead class="bg-gray-50 text-left text-xs uppercase text-gray-500">
@@ -272,8 +280,9 @@
                     fiscalClients: [],
                     globalDiscount: config.globalDiscount || '0',
                     productSearch: { query: '', open: false, results: [] },
-                    taxDrawer: { open: false, index: -1 },
-                    taxesEdit: [],
+                    taxDrawer: { open: false, index: -1, error: '' },
+                    taxesDraft: [],
+                    taxFeedback: '',
                     items: (config.initialItems || []).map((item, index) => ({
                         uid: `${Date.now()}-${index}`,
                         product_id: item.product_id || '',
@@ -400,6 +409,18 @@
                     itemTaxTotal(item) {
                         return (item.taxes || []).reduce((carry, tax) => carry + this.taxAmountFor(item, tax), 0);
                     },
+                    taxTotalsFor(taxes, item) {
+                        return (taxes || []).reduce((carry, tax) => {
+                            const amount = this.taxAmountFor(item, tax);
+                            if (tax.tax_type === 'retencion') {
+                                carry.retentions += Math.abs(amount);
+                            } else {
+                                carry.transfers += amount;
+                            }
+                            carry.net += amount;
+                            return carry;
+                        }, { transfers: 0, retentions: 0, net: 0 });
+                    },
                     taxSummary(item) {
                         if (!(item.taxes || []).length) return 'Sin impuestos';
                         return item.taxes.map((tax) => this.taxLabel(tax)).join(' + ');
@@ -436,11 +457,11 @@
                         };
                     },
                     openTaxes(index) {
-                        this.taxDrawer = { open: true, index };
-                        this.taxesEdit = (this.items[index]?.taxes || []).map((tax) => this.normalizeTax(tax));
+                        this.taxDrawer = { open: true, index, error: '' };
+                        this.taxesDraft = (this.items[index]?.taxes || []).map((tax) => this.normalizeTax(tax));
                     },
                     addTax() {
-                        this.taxesEdit.push(this.normalizeTax({
+                        this.taxesDraft.push(this.normalizeTax({
                             tax_name: 'IVA',
                             tax_type: 'traslado',
                             tax_mode: 'rate',
@@ -448,18 +469,34 @@
                         }));
                     },
                     removeTax(index) {
-                        this.taxesEdit.splice(index, 1);
+                        this.taxesDraft.splice(index, 1);
                     },
-                    saveTaxes() {
+                    applyTaxes() {
                         if (this.taxDrawer.index < 0 || !this.items[this.taxDrawer.index]) return;
-                        this.items[this.taxDrawer.index].taxes = this.taxesEdit
+                        const normalized = this.taxesDraft.map((tax) => this.normalizeTax(tax));
+                        const invalid = normalized.find((tax) => {
+                            if (tax.tax_name.trim() === '') return true;
+                            if (!['traslado', 'retencion'].includes(tax.tax_type)) return true;
+                            if (!['rate', 'zero', 'exempt'].includes(tax.tax_mode)) return true;
+                            if (tax.tax_mode === 'rate' && this.toNumber(tax.rate) < 0) return true;
+                            return false;
+                        });
+
+                        if (invalid) {
+                            this.taxDrawer.error = 'Revisa nombre, tipo, modo y tasa de cada impuesto.';
+                            return;
+                        }
+
+                        this.items[this.taxDrawer.index].taxes = normalized
                             .map((tax) => this.normalizeTax(tax))
                             .filter((tax) => tax.tax_name.trim() !== '');
-                        this.closeTaxes();
+                        this.taxFeedback = 'Impuestos aplicados a la partida.';
+                        window.setTimeout(() => { this.taxFeedback = ''; }, 2500);
+                        this.cancelTaxes();
                     },
-                    closeTaxes() {
-                        this.taxDrawer = { open: false, index: -1 };
-                        this.taxesEdit = [];
+                    cancelTaxes() {
+                        this.taxDrawer = { open: false, index: -1, error: '' };
+                        this.taxesDraft = [];
                     },
                     activeTaxItem() {
                         return this.items[this.taxDrawer.index] || null;

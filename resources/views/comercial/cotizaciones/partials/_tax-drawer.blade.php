@@ -4,8 +4,9 @@
     class="fixed inset-0 z-50"
     aria-modal="true"
     role="dialog"
+    @keydown.escape.window="cancelTaxes()"
 >
-    <div class="absolute inset-0 bg-gray-900/40" @click="closeTaxes()"></div>
+    <div class="absolute inset-0 bg-gray-900/40" @click="cancelTaxes()"></div>
     <aside class="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col bg-white shadow-2xl">
         <div class="border-b border-gray-200 px-5 py-4">
             <div class="flex items-start justify-between gap-4">
@@ -14,7 +15,7 @@
                     <h3 class="text-lg font-semibold text-gray-900" x-text="activeTaxItem()?.snapshot_name || 'Partida'"></h3>
                     <p class="mt-1 text-sm text-gray-500">La base se calcula automaticamente; no se captura manualmente.</p>
                 </div>
-                <button type="button" @click="closeTaxes()" class="rounded-md border border-gray-200 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Cerrar</button>
+                <button type="button" @click="cancelTaxes()" class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50" aria-label="Cerrar drawer">X</button>
             </div>
         </div>
 
@@ -35,7 +36,7 @@
             </div>
 
             <div class="space-y-3">
-                <template x-for="(tax, index) in taxesEdit" :key="`tax-edit-${index}`">
+                <template x-for="(tax, index) in taxesDraft" :key="`tax-draft-${index}`">
                     <div class="rounded-lg border border-gray-200 p-3">
                         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <div>
@@ -75,22 +76,33 @@
                     </div>
                 </template>
 
-                <div x-show="!taxesEdit.length" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
+                <div x-show="!taxesDraft.length" class="rounded-lg border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500">
                     Esta partida no tiene impuestos comerciales.
                 </div>
             </div>
         </div>
 
         <div class="border-t border-gray-200 px-5 py-4">
-            <div class="mb-3 flex items-center justify-between text-sm">
-                <span class="text-gray-500">Impuesto neto estimado</span>
-                <span class="font-semibold text-gray-900" x-text="`$${money(taxesEdit.reduce((carry, tax) => carry + taxAmountFor(activeTaxItem() || {}, tax), 0))}`"></span>
+            <div x-show="taxDrawer.error" class="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" x-text="taxDrawer.error"></div>
+            <div class="mb-3 grid grid-cols-1 gap-2 rounded-lg bg-gray-50 p-3 text-sm sm:grid-cols-3">
+                <div class="flex justify-between gap-2 sm:block">
+                    <span class="text-gray-500">Traslados</span>
+                    <span class="font-semibold text-gray-900" x-text="`$${money(taxTotalsFor(taxesDraft, activeTaxItem() || {}).transfers)}`"></span>
+                </div>
+                <div class="flex justify-between gap-2 sm:block">
+                    <span class="text-gray-500">Retenciones</span>
+                    <span class="font-semibold text-gray-900" x-text="`$${money(taxTotalsFor(taxesDraft, activeTaxItem() || {}).retentions)}`"></span>
+                </div>
+                <div class="flex justify-between gap-2 sm:block">
+                    <span class="text-gray-500">Neto</span>
+                    <span class="font-semibold text-gray-900" x-text="`$${money(taxTotalsFor(taxesDraft, activeTaxItem() || {}).net)}`"></span>
+                </div>
             </div>
             <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
                 <button type="button" @click="addTax()" class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">Agregar impuesto</button>
                 <div class="flex gap-2">
-                    <button type="button" @click="closeTaxes()" class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">Cancelar</button>
-                    <button type="button" @click="saveTaxes()" class="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white">Guardar impuestos</button>
+                    <button type="button" @click="cancelTaxes()" class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">Cancelar</button>
+                    <button type="button" @click="applyTaxes()" class="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white">Aplicar impuestos</button>
                 </div>
             </div>
         </div>

@@ -1,5 +1,5 @@
 <x-app-layout>
-    <div class="px-4 sm:px-6 lg:px-8 py-8 w-full max-w-9xl mx-auto">
+    <x-ikontrol.page-shell max-width="wide">
         <x-ikontrol.page-header
             title="Cotizaciones comerciales"
             description="Documentos comerciales independientes del flujo CFDI."
@@ -9,7 +9,7 @@
         />
 
         @if(session('status'))
-            <div class="mb-6">
+            <div>
                 <x-ikontrol.info-alert title="Listo">{{ session('status') }}</x-ikontrol.info-alert>
             </div>
         @endif
@@ -62,7 +62,7 @@
             </form>
         </x-ikontrol.module-section>
 
-        <div class="mt-6 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800 shadow-xs">
+        <div class="overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700/60 bg-white dark:bg-gray-800 shadow-xs">
             <div class="overflow-x-auto">
                 <table class="min-w-full text-sm">
                     <thead class="bg-gray-50 dark:bg-gray-700/30 text-gray-500 dark:text-gray-400">
@@ -108,5 +108,5 @@
             </div>
             <div class="p-4">{{ $quotes->links() }}</div>
         </div>
-    </div>
+    </x-ikontrol.page-shell>
 </x-app-layout>

@@ -1,5 +1,5 @@
 <x-app-layout>
-    <div class="px-4 sm:px-6 lg:px-8 py-8 w-full max-w-9xl mx-auto">
+    <x-ikontrol.page-shell max-width="wide">
         <x-ikontrol.page-header
             :title="$quote->folio"
             description="Detalle de cotizacion comercial."
@@ -7,12 +7,12 @@
         />
 
         @if(session('status'))
-            <div class="mb-6">
+            <div>
                 <x-ikontrol.info-alert title="Listo">{{ session('status') }}</x-ikontrol.info-alert>
             </div>
         @endif
 
-        <div class="mb-6 flex flex-wrap gap-2">
+        <div class="flex flex-wrap gap-2">
             @if($quote->canBeEdited())
                 <x-ikontrol.primary-link href="{{ route('comercial.cotizaciones.edit', $quote) }}">Editar</x-ikontrol.primary-link>
             @endif
@@ -136,5 +136,5 @@
                 </x-ikontrol.module-section>
             </div>
         </div>
-    </div>
+    </x-ikontrol.page-shell>
 </x-app-layout>

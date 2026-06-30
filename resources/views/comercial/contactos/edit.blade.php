@@ -1,5 +1,5 @@
 <x-app-layout>
-    <div class="px-4 sm:px-6 lg:px-8 py-8 w-full max-w-3xl mx-auto">
+    <x-ikontrol.page-shell max-width="3xl">
         <x-ikontrol.page-header
             title="Editar contacto"
             :description="$commercialClient->name"
@@ -7,7 +7,7 @@
         />
 
         @if($errors->any())
-            <div class="mb-6 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <div class="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                 <ul class="list-disc pl-5">
                     @foreach($errors->all() as $error)
                         <li>{{ $error }}</li>
@@ -58,5 +58,5 @@
                 </div>
             </form>
         </x-ikontrol.module-section>
-    </div>
+    </x-ikontrol.page-shell>
 </x-app-layout>

@@ -1,5 +1,5 @@
 <x-app-layout>
-    <div class="px-4 sm:px-6 lg:px-8 py-8 w-full max-w-7xl mx-auto">
+    <x-ikontrol.page-shell>
         <x-ikontrol.page-header
             title="Contactos comerciales"
             description="Listado global de contactos asociados a clientes comerciales."
@@ -13,7 +13,7 @@
             </form>
         </x-ikontrol.module-section>
 
-        <div class="mt-6 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xs">
+        <div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xs">
             <div class="overflow-x-auto">
                 <table class="min-w-full text-sm">
                     <thead class="bg-gray-50 text-gray-500">
@@ -51,5 +51,5 @@
             </div>
             <div class="p-4">{{ $contacts->links() }}</div>
         </div>
-    </div>
+    </x-ikontrol.page-shell>
 </x-app-layout>
