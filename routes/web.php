@@ -119,7 +119,6 @@ Route::middleware(['auth:sanctum', 'verified'])->group(function () {
 
 
         Route::get('/facturas/chunk', [FacturasController::class, 'indexChunk'])->name('facturas.indexChunk');
-        Route::get('/facturas/rows', [\App\Http\Controllers\Users\FacturasController::class, 'rows'])->name('facturas.rows');
 
 
         // Complementos de pago
