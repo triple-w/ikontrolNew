@@ -8,13 +8,13 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use App\Http\Controllers\Traits\PacMultipacTrait;
+use App\Http\Controllers\Traits\PacMultiPacTrait;
 use Carbon\Carbon;
 
 class ComplementosController extends Controller
 {
 
-    use PacMultipacTrait;
+    use PacMultiPacTrait;
     // =========================
     // LISTADO cambio para visualizarlo en el comit
     // =========================

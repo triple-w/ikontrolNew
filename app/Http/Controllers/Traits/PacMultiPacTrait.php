@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Traits;
 
 use Illuminate\Support\Facades\DB;
 
-trait PacMultipacTrait
+trait PacMultiPacTrait
 {
     private function cargarCsdParaTimbrado(int $userId): array
     {
