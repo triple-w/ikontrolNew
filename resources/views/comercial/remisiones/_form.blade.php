@@ -240,6 +240,7 @@
                                             Impuestos <span class="ml-2 rounded-full bg-teal-50 px-2 py-0.5 text-teal-700" x-text="item.taxes.length"></span>
                                         </button>
                                         <div class="mt-1 text-xs text-gray-500" x-text="taxSummary(item)"></div>
+                                        <div class="text-xs font-medium text-gray-700" x-text="`Neto imp.: $${money(itemTaxTotal(item))}`"></div>
                                     </td>
                                     <td class="px-3 py-3 text-right font-medium" x-text="`$${money(lineTotal(item))}`"></td>
                                     <td class="px-3 py-3 text-right">
@@ -435,9 +436,17 @@
                     removeTax(index) { this.taxesDraft.splice(index, 1); },
                     applyTaxes() {
                         if (this.activeTaxRowIndex < 0 || !this.items[this.activeTaxRowIndex]) return;
-                        const normalized = this.cloneTaxes(this.taxesDraft);
-                        if (normalized.some((tax) => tax.tax_name.trim() === '')) { this.taxDrawer.error = 'Revisa nombre, tipo, modo y tasa de cada impuesto.'; return; }
-                        this.items[this.activeTaxRowIndex].taxes = normalized.map((tax) => ({ ...tax }));
+                        const draftWithValues = this.taxesDraft.filter((tax) => (tax.tax_name || '').trim() !== '' || this.toNumber(tax.rate) > 0);
+                        const normalized = this.cloneTaxes(draftWithValues);
+                        const invalid = normalized.find((tax) => {
+                            if (tax.tax_name.trim() === '') return true;
+                            if (!['traslado', 'retencion'].includes(tax.tax_type)) return true;
+                            if (!['rate', 'zero', 'exempt'].includes(tax.tax_mode)) return true;
+                            if (tax.tax_mode === 'rate' && this.toNumber(tax.rate) < 0) return true;
+                            return false;
+                        });
+                        if (invalid) { this.taxDrawer.error = 'Revisa nombre, tipo, modo y tasa de cada impuesto.'; return; }
+                        this.items[this.activeTaxRowIndex].taxes = JSON.parse(JSON.stringify(normalized));
                         this.taxFeedback = 'Impuestos aplicados a la partida.';
                         window.setTimeout(() => { this.taxFeedback = ''; }, 2500);
                         this.cancelTaxes();

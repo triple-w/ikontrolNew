@@ -394,10 +394,11 @@ class CommercialQuoteController extends Controller
                 'id' => (int) $product->id,
                 'sku' => (string) ($product->clave ?? ''),
                 'snapshot_name' => (string) ($product->descripcion ?? ''),
-                'snapshot_description' => (string) ($product->observaciones ?: $product->descripcion ?: ''),
+                'snapshot_description' => (string) ($product->descripcion ?? ''),
                 'snapshot_unit' => (string) ($product->unidad ?: $product->unidadSat?->clave ?: ''),
                 'unit_price' => (string) ($product->precio ?? '0.000000'),
                 'taxes' => [],
+                'notes' => '',
             ])->values(),
         ]);
     }

@@ -101,6 +101,28 @@ class CommercialRemissionsTest extends TestCase
         $this->assertSame(1, DB::table('commercial_remission_taxes')->count());
     }
 
+    public function test_remission_tax_drawer_applies_only_confirmed_draft_taxes_to_item_payload(): void
+    {
+        $form = file_get_contents(resource_path('views/comercial/remisiones/_form.blade.php'));
+        $drawer = file_get_contents(resource_path('views/comercial/cotizaciones/partials/_tax-drawer.blade.php'));
+
+        $this->assertStringContainsString('taxesDraft = this.cloneTaxes(this.items[index]?.taxes || [])', $form);
+        $this->assertStringContainsString('this.items[this.activeTaxRowIndex].taxes = JSON.parse(JSON.stringify(normalized))', $form);
+        $this->assertStringContainsString("draftWithValues = this.taxesDraft", $form);
+        $this->assertStringContainsString("this.cloneTaxes(draftWithValues)", $form);
+        $this->assertStringContainsString('cancelTaxes() { this.taxDrawer = { open: false, error: \'\' }; this.activeTaxRowIndex = -1; this.taxesDraft = []; }', $form);
+        $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][tax_name]', $form);
+        $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][tax_type]', $form);
+        $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][tax_mode]', $form);
+        $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][rate]', $form);
+        $this->assertStringContainsString('Neto imp.: $${money(itemTaxTotal(item))}', $form);
+
+        $this->assertStringContainsString('Agregar impuesto', $drawer);
+        $this->assertStringContainsString('Cancelar', $drawer);
+        $this->assertStringContainsString('Aplicar impuestos', $drawer);
+        $this->assertStringContainsString('sticky bottom-0', $drawer);
+    }
+
     public function test_remission_can_accept_draft_quote_only_after_successful_save(): void
     {
         $user = $this->createUser();

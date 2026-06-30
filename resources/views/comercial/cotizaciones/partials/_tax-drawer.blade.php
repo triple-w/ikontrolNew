@@ -82,7 +82,7 @@
             </div>
         </div>
 
-        <div class="border-t border-gray-200 px-5 py-4">
+        <div class="sticky bottom-0 border-t border-gray-200 bg-white px-5 py-4 shadow-[0_-8px_20px_rgba(15,23,42,0.08)]">
             <div x-show="taxDrawer.error" class="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" x-text="taxDrawer.error"></div>
             <div class="mb-3 grid grid-cols-1 gap-2 rounded-lg bg-gray-50 p-3 text-sm sm:grid-cols-3">
                 <div class="flex justify-between gap-2 sm:block">
@@ -98,11 +98,11 @@
                     <span class="font-semibold text-gray-900" x-text="`$${money(taxTotalsFor(taxesDraft, activeTaxItem() || {}).net)}`"></span>
                 </div>
             </div>
-            <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-                <button type="button" @click="addTax()" class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">Agregar impuesto</button>
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <button type="button" @click="addTax()" class="inline-flex justify-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Agregar impuesto</button>
                 <div class="flex gap-2">
-                    <button type="button" @click="cancelTaxes()" class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700">Cancelar</button>
-                    <button type="button" @click="applyTaxes()" class="rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white">Aplicar impuestos</button>
+                    <button type="button" @click="cancelTaxes()" class="inline-flex flex-1 justify-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:flex-none">Cancelar</button>
+                    <button type="button" @click="applyTaxes()" class="inline-flex flex-1 justify-center rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 sm:flex-none">Aplicar impuestos</button>
                 </div>
             </div>
         </div>

@@ -486,7 +486,9 @@
                     },
                     applyTaxes() {
                         if (this.activeTaxRowIndex < 0 || !this.items[this.activeTaxRowIndex]) return;
-                        const normalized = this.cloneTaxes(this.taxesDraft);
+                        const draftWithValues = this.taxesDraft
+                            .filter((tax) => (tax.tax_name || '').trim() !== '' || this.toNumber(tax.rate) > 0);
+                        const normalized = this.cloneTaxes(draftWithValues);
                         const invalid = normalized.find((tax) => {
                             if (tax.tax_name.trim() === '') return true;
                             if (!['traslado', 'retencion'].includes(tax.tax_type)) return true;
@@ -500,9 +502,7 @@
                             return;
                         }
 
-                        this.items[this.activeTaxRowIndex].taxes = normalized
-                            .map((tax) => ({ ...tax }))
-                            .filter((tax) => tax.tax_name.trim() !== '');
+                        this.items[this.activeTaxRowIndex].taxes = JSON.parse(JSON.stringify(normalized));
                         this.taxFeedback = 'Impuestos aplicados a la partida.';
                         window.setTimeout(() => { this.taxFeedback = ''; }, 2500);
                         this.cancelTaxes();

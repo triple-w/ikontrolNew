@@ -207,8 +207,10 @@ class CommercialQuotesTest extends TestCase
 
         $this->assertStringContainsString('activeTaxRowIndex', $form);
         $this->assertStringContainsString('taxesDraft = this.cloneTaxes(this.items[index]?.taxes || [])', $form);
-        $this->assertStringContainsString('this.items[this.activeTaxRowIndex].taxes = normalized', $form);
-        $this->assertStringContainsString('.map((tax) => ({ ...tax }))', $form);
+        $this->assertStringContainsString('this.items[this.activeTaxRowIndex].taxes = JSON.parse(JSON.stringify(normalized))', $form);
+        $this->assertStringContainsString("draftWithValues = this.taxesDraft", $form);
+        $this->assertStringContainsString("this.cloneTaxes(draftWithValues)", $form);
+        $this->assertStringContainsString('cancelTaxes() {', $form);
         $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][tax_name]', $form);
         $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][tax_type]', $form);
         $this->assertStringContainsString('items[${index}][taxes][${taxIndex}][tax_mode]', $form);
@@ -218,8 +220,22 @@ class CommercialQuotesTest extends TestCase
 
         $this->assertStringContainsString('Cancelar', $drawer);
         $this->assertStringContainsString('Aplicar impuestos', $drawer);
+        $this->assertStringContainsString('sticky bottom-0', $drawer);
         $this->assertStringContainsString('@click="cancelTaxes()"', $drawer);
         $this->assertStringContainsString('@click="applyTaxes()"', $drawer);
+    }
+
+    public function test_product_search_does_not_copy_internal_observations_to_quote_item_payload(): void
+    {
+        $user = $this->createUser();
+        $this->createProduct($user->id, 'SERV-OBS', 'Servicio comercial limpio', '100', 'ESTE ES UN SERVICIO');
+
+        $this->actingAs($user)
+            ->getJson(route('comercial.cotizaciones.search-productos', ['q' => 'Servicio']))
+            ->assertOk()
+            ->assertJsonPath('data.0.snapshot_name', 'Servicio comercial limpio')
+            ->assertJsonPath('data.0.snapshot_description', 'Servicio comercial limpio')
+            ->assertJsonPath('data.0.notes', '');
     }
 
     public function test_user_cannot_view_another_users_quote(): void
@@ -482,6 +498,18 @@ class CommercialQuotesTest extends TestCase
             $table->timestamps();
         });
 
+        Schema::create('clave_prod_serv', function ($table) {
+            $table->id();
+            $table->string('clave', 20);
+            $table->string('descripcion', 150);
+        });
+
+        Schema::create('clave_unidad', function ($table) {
+            $table->id();
+            $table->string('clave', 20);
+            $table->string('descripcion', 150);
+        });
+
         Schema::create('productos', function ($table) {
             $table->id();
             $table->bigInteger('users_id');
@@ -642,7 +670,7 @@ class CommercialQuotesTest extends TestCase
         ]);
     }
 
-    private function createProduct(int $userId, string $sku, string $description, string $price): int
+    private function createProduct(int $userId, string $sku, string $description, string $price, ?string $observations = null): int
     {
         return (int) DB::table('productos')->insertGetId([
             'users_id' => $userId,
@@ -650,6 +678,7 @@ class CommercialQuotesTest extends TestCase
             'unidad' => 'SERV',
             'precio' => $price,
             'descripcion' => $description,
+            'observaciones' => $observations,
         ]);
     }
 
