@@ -102,7 +102,13 @@
                 <button type="button" @click="addTax()" class="inline-flex justify-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Agregar impuesto</button>
                 <div class="flex gap-2">
                     <button type="button" @click="cancelTaxes()" class="inline-flex flex-1 justify-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 sm:flex-none">Cancelar</button>
-                    <button type="button" @click="applyTaxes()" class="inline-flex flex-1 justify-center rounded-md bg-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-teal-700 sm:flex-none">Aplicar impuestos</button>
+                    <button
+                        type="button"
+                        @click="applyTaxes()"
+                        class="inline-flex min-w-[170px] items-center justify-center rounded-lg bg-violet-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-violet-700"
+                    >
+                        Aplicar impuestos
+                    </button>
                 </div>
             </div>
         </div>
